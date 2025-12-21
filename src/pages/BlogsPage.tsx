@@ -21,7 +21,7 @@ const BlogsPage = () => {
       // Optimized: Only select needed fields
       const { data, error } = await supabase
         .from('blog_posts')
-        .select('id, title, slug, excerpt, featured_image, is_published, published_at, external_link, category, created_at')
+        .select('id, title, slug, excerpt, featured_image, is_published, published_at, external_link, category, created_at, author, read_time')
         .eq('is_published', true)
         .order('published_at', { ascending: false });
 
@@ -183,12 +183,14 @@ const BlogsPage = () => {
                   {/* Author & Read Time */}
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <div>
-                      <p className="font-medium text-gray-700">{blog.author}</p>
+                      <p className="font-medium text-gray-700">{blog.author || 'Karma Terra'}</p>
                       <p className="text-gray-500">Karma Terra Blog</p>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-green-600 font-medium">{blog.read_time}</span>
-                    </div>
+                    {blog.read_time && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-green-600 font-medium">{blog.read_time}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
