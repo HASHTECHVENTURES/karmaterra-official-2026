@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Send, CheckCircle, HelpCircle } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle, HelpCircle, Mail, Phone, ExternalLink } from "lucide-react";
 import { AndroidPageHeader } from "../components/AndroidBackButton";
 import { useAuth } from "../App";
 import { supabase } from "../lib/supabase";
 import { toast } from "sonner";
 import { getErrorMessage, isNetworkError } from "../lib/apiHelper";
+import { getAppConfigs } from "../services/appConfigService";
 
 const HelpPage = () => {
   const navigate = useNavigate();
@@ -15,6 +16,29 @@ const HelpPage = () => {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [contactInfo, setContactInfo] = useState<{
+    email: string | null;
+    phone: string | null;
+    supportUrl: string | null;
+  }>({
+    email: null,
+    phone: null,
+    supportUrl: null,
+  });
+
+  useEffect(() => {
+    const fetchContactInfo = async () => {
+      const config = await getAppConfigs();
+      if (config) {
+        setContactInfo({
+          email: config.contact_email,
+          phone: config.contact_phone,
+          supportUrl: config.support_url,
+        });
+      }
+    };
+    fetchContactInfo();
+  }, []);
 
   const categories = [
     { value: "general", label: "General Question" },
@@ -191,8 +215,46 @@ const HelpPage = () => {
             </button>
           </form>
 
+          {/* Contact Information */}
+          {(contactInfo.email || contactInfo.phone || contactInfo.supportUrl) && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
+              <div className="space-y-3">
+                {contactInfo.email && (
+                  <a
+                    href={`mailto:${contactInfo.email}`}
+                    className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700 hover:underline"
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>{contactInfo.email}</span>
+                  </a>
+                )}
+                {contactInfo.phone && (
+                  <a
+                    href={`tel:${contactInfo.phone.replace(/\s+/g, '')}`}
+                    className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700 hover:underline"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>{contactInfo.phone}</span>
+                  </a>
+                )}
+                {contactInfo.supportUrl && (
+                  <a
+                    href={contactInfo.supportUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700 hover:underline"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Visit Support Center</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Quick Help Links */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
+          <div className="mt-6 pt-6 border-t border-gray-200">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Links</h3>
             <div className="space-y-2">
               <button
