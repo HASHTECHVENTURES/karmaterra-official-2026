@@ -16,7 +16,6 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import FeedbackPage from './pages/FeedbackPage'
 import HelpRequestsPage from './pages/HelpRequestsPage'
 import ServiceReportsPage from './pages/ServiceReportsPage'
-import CompanyLogosPage from './pages/CompanyLogosPage'
 import { Toaster } from 'sonner'
 
 const queryClient = new QueryClient({
@@ -51,7 +50,6 @@ function App() {
             <Route path="/feedback" element={<FeedbackPage />} />
             <Route path="/help-requests" element={<HelpRequestsPage />} />
             <Route path="/service-reports" element={<ServiceReportsPage />} />
-            <Route path="/company-logos" element={<CompanyLogosPage />} />
             </Routes>
           </Layout>
           <Toaster position="top-right" />

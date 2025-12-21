@@ -13,8 +13,7 @@ import {
   Sparkles,
   MessageCircle,
   HelpCircle,
-  Flag,
-  Building2
+  Flag
 } from 'lucide-react'
 
 interface LayoutProps {
@@ -38,7 +37,6 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/service-reports', label: 'Service Reports', icon: Flag },
     { path: '/carousel', label: 'Home Banner', icon: Image },
     { path: '/images', label: 'App Icon', icon: Image },
-    { path: '/company-logos', label: 'Company Logos', icon: Building2 },
     { path: '/config', label: 'App Config', icon: Settings },
   ]
 
