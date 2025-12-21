@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, BookOpen } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { SkeletonLoader, CardSkeleton } from "@/components/SkeletonLoader";
 
 const BlogsPage = () => {
   const navigate = useNavigate();
