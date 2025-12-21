@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
+import ProtectedRoute from './components/ProtectedRoute'
+import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
 import BlogsPage from './pages/BlogsPage'
@@ -32,26 +34,36 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <Layout>
-            <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/blogs" element={<BlogsPage />} />
-            <Route path="/images" element={<ImagesPage />} />
-            <Route path="/knowledge" element={<Navigate to="/ask-karma" replace />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            <Route path="/config" element={<ConfigPage />} />
-            <Route path="/carousel" element={<CarouselPage />} />
-            <Route path="/hair" element={<HairPage />} />
-            <Route path="/skin" element={<SkinPage />} />
-            <Route path="/ask-karma" element={<AskKarmaPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/feedback" element={<FeedbackPage />} />
-            <Route path="/help-requests" element={<HelpRequestsPage />} />
-            <Route path="/service-reports" element={<ServiceReportsPage />} />
-            </Routes>
-          </Layout>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Routes>
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/users" element={<UsersPage />} />
+                      <Route path="/blogs" element={<BlogsPage />} />
+                      <Route path="/images" element={<ImagesPage />} />
+                      <Route path="/knowledge" element={<Navigate to="/ask-karma" replace />} />
+                      <Route path="/notifications" element={<NotificationsPage />} />
+                      <Route path="/config" element={<ConfigPage />} />
+                      <Route path="/carousel" element={<CarouselPage />} />
+                      <Route path="/hair" element={<HairPage />} />
+                      <Route path="/skin" element={<SkinPage />} />
+                      <Route path="/ask-karma" element={<AskKarmaPage />} />
+                      <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/feedback" element={<FeedbackPage />} />
+                      <Route path="/help-requests" element={<HelpRequestsPage />} />
+                      <Route path="/service-reports" element={<ServiceReportsPage />} />
+                    </Routes>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
           <Toaster position="top-right" />
         </BrowserRouter>
       </QueryClientProvider>

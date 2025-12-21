@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   Users, 
@@ -13,8 +13,11 @@ import {
   Sparkles,
   MessageCircle,
   HelpCircle,
-  Flag
+  Flag,
+  LogOut
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
 
 interface LayoutProps {
   children: ReactNode
@@ -22,6 +25,19 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+      localStorage.removeItem('admin_session')
+      toast.success('Logged out successfully')
+      navigate('/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+      toast.error('Error logging out')
+    }
+  }
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -71,6 +87,17 @@ export default function Layout({ children }: LayoutProps) {
             )
           })}
         </nav>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-gray-200">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
