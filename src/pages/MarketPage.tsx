@@ -36,7 +36,7 @@ const MarketPage = () => {
         <p className="mb-3">Opening the KarmaTerra store in your browser...</p>
         <button
           onClick={() => Browser.open({ url: "https://www.karmaterra.in/" })}
-          className="px-4 py-2 rounded-lg bg-green-600 text-white"
+          className="px-4 py-2 rounded-lg bg-karma-gold hover:bg-karma-gold/90 text-white transition-colors"
         >
           Open Store
         </button>

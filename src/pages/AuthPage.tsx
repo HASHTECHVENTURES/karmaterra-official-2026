@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { getCountries, getStatesByCountry, getCitiesByState } from "@/lib/locationData";
+import { getAppImageByName } from "@/services/appImagesService";
 
 const AuthPage = () => {
   const [pin, setPin] = useState("");
@@ -19,7 +20,23 @@ const AuthPage = () => {
   const [showPin, setShowPin] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [appIconUrl, setAppIconUrl] = useState("/app-icon.png");
   const { login } = useAuth();
+
+  // Fetch app icon from database
+  useEffect(() => {
+    const fetchAppIcon = async () => {
+      try {
+        const icon = await getAppImageByName('app-icon');
+        if (icon) {
+          setAppIconUrl(icon.image_url);
+        }
+      } catch (error) {
+        console.error('Error fetching app icon:', error);
+      }
+    };
+    fetchAppIcon();
+  }, []);
 
   // Get location data
   const countries = getCountries();
@@ -182,16 +199,19 @@ const AuthPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-green-50 flex items-center justify-center p-4 safe-area-all">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-all">
       {/* Main Card */}
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8">
         {/* Logo */}
         <div className="flex justify-center mb-6">
           <div className="w-24 h-24 bg-white border-2 border-green-200 rounded-xl flex items-center justify-center p-2">
             <img 
-              src="/lovable-uploads/223eca30-a4ce-4252-8a09-b59de0313219.png" 
+              src={appIconUrl} 
               alt="Karma Terra Logo"
               className="w-full h-full object-contain"
+              onError={(e) => {
+                e.currentTarget.src = "/app-icon.png";
+              }}
             />
           </div>
         </div>
@@ -403,7 +423,7 @@ const AuthPage = () => {
           <Button 
             type="submit" 
             disabled={loading}
-            className="w-full h-12 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold rounded-lg shadow-md disabled:opacity-50"
+            className="w-full h-12 bg-karma-gold hover:bg-karma-gold/90 text-white font-semibold rounded-lg shadow-md disabled:opacity-50 transition-colors"
           >
             {loading ? (
               <div className="flex items-center">

@@ -42,7 +42,7 @@ const CommunityPage = () => {
               href="https://chat.whatsapp.com/Ii8kAiBCdR13qEakwklCbw?mode=ems_copy_t"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-medium rounded-lg hover:shadow-lg transition-all w-full justify-center"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-karma-gold hover:bg-karma-gold/90 text-white text-sm font-medium rounded-lg hover:shadow-lg transition-all w-full justify-center"
             >
               <ExternalLink className="w-4 h-4" />
               Join WhatsApp Community

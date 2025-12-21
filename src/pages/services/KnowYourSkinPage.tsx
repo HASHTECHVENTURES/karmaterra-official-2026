@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, LoaderCircle, History, Camera, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, LoaderCircle, History, Camera, AlertCircle, ChevronDown, ChevronUp, Flag } from "lucide-react";
 import { AndroidPageHeader } from "../../components/AndroidBackButton";
 import Questionnaire, { QuestionnaireAnswers } from "../../components/Questionnaire";
 import PhotoCapture from "../../components/PhotoCapture";
-import { analyzeSkin } from "../../services/geminiService";
+import { analyzeSkin } from "../../services/geminiServiceEdge";
 import { useAuth } from "../../App";
 import { UserData, Report } from "../../types";
 import { supabase } from "../../lib/supabase";
+import ServiceReportModal from "../../components/ServiceReportModal";
 
 const KnowYourSkinPage = () => {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ const KnowYourSkinPage = () => {
   const [hasAnalysisHistory, setHasAnalysisHistory] = useState(false);
   const [allAnalyses, setAllAnalyses] = useState<any[]>([]);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -389,7 +391,7 @@ const KnowYourSkinPage = () => {
       (userDataForApi as any).skinTreatment = questionnaireAnswers.skinTreatment;
 
       console.log('🧩 Sending user data to AI:', userDataForApi);
-      const result = await analyzeSkin(userDataForApi, images);
+      const result = await analyzeSkin(userDataForApi, images, userProfile.id);
 
       const report: Report = {
         id: new Date().toISOString(), // This will be replaced by the DB ID
@@ -432,8 +434,16 @@ const KnowYourSkinPage = () => {
         if (err.message.includes('429') || 
             err.message.includes('Resource exhausted') || 
             err.message.includes('rate limit') ||
-            err.message.includes('at capacity')) {
-          errorMessage = "AI service is currently at capacity. Please wait a few minutes and try again. Our API has reached its rate limit for now.";
+            err.message.includes('at capacity') ||
+            err.message.includes('quota') ||
+            err.message.includes('Quota exceeded')) {
+          // Extract retry time if mentioned in error
+          const retryMatch = err.message.match(/try again in (\d+) seconds?/i)
+          if (retryMatch) {
+            errorMessage = `AI service quota exceeded. Please try again in ${retryMatch[1]} seconds.`;
+          } else {
+            errorMessage = "AI service quota exceeded. Please wait a few minutes and try again, or check your API plan and billing details.";
+          }
         } else if (err.message.includes("API")) {
           errorMessage = "AI service temporarily unavailable. Please try again in a few moments.";
         } else if (err.message.includes("image") || err.message.includes("Image")) {
@@ -512,7 +522,7 @@ const KnowYourSkinPage = () => {
                             })}
                           </h3>
                           {isRecent && (
-                            <span className="text-xs bg-gradient-to-r from-green-500 to-green-600 text-white px-3 py-1 rounded-full font-semibold shadow-sm">
+                            <span className="text-xs bg-karma-gold text-white px-3 py-1 rounded-full font-semibold shadow-sm">
                               Latest
                             </span>
                           )}
@@ -734,12 +744,29 @@ const KnowYourSkinPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50">
+    <div className="min-h-screen bg-background">
       {/* Android Material Design Header */}
       <AndroidPageHeader
         title="Know Your Skin"
         subtitle={useLocalMcq ? 'AI-powered analysis' : 'Embedded analysis'}
         backTo="/"
+        rightContent={
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Report issue"
+            title="Report issue"
+          >
+            <Flag className="w-5 h-5 text-gray-600" />
+          </button>
+        }
+      />
+      
+      {/* Report Modal */}
+      <ServiceReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        serviceName="know_your_skin"
       />
 
       {useLocalMcq ? (

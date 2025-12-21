@@ -4,7 +4,7 @@ import { LoaderCircle, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 import { AndroidPageHeader } from "../components/AndroidBackButton";
 import HairQuestionnaire, { HairQuestionnaireAnswers } from "../components/HairQuestionnaire";
 import HairPhotoCapture from "../components/HairPhotoCapture";
-import { analyzeHair, HairAnalysisResult } from "../services/geminiService";
+import { analyzeHair, HairAnalysisResult } from "../services/geminiServiceEdge";
 import { useAuth } from "../App";
 import { supabase } from "../lib/supabase";
 import { UserData, Report, AnalysisResult } from "../types";
@@ -198,7 +198,7 @@ const HairAnalysisPage = () => {
       };
 
       console.log('🧩 Sending user data to AI:', userDataForApi);
-      const result = await analyzeHair(userDataForApi, images, questionnaireAnswers);
+      const result = await analyzeHair(userDataForApi, images, questionnaireAnswers, userProfile.id);
 
       // Validate result structure
       if (!result || !result.hair_analysis) {
@@ -326,7 +326,7 @@ const HairAnalysisPage = () => {
         questionnaireAnswers: questionnaireAnswers
       };
       
-      navigate('/hair-analysis-results', { state: { report: finalReport, fullHairResult: fullHairResult } });
+      navigate('/hair-analysis-results', { state: { report: finalReport, fullHairResult: fullHairResult, hairImages: images } });
 
     } catch (err) {
       console.error("❌ Hair analysis failed:", err);
@@ -512,7 +512,7 @@ const HairAnalysisPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-green-50">
+    <div className="min-h-screen bg-background">
       {/* Android Material Design Header */}
       <AndroidPageHeader
         title="Hair Analysis"

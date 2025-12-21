@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Send, MessageSquare, Trash2, Menu, X, History } from "lucide-react";
+import { Plus, Send, MessageSquare, Trash2, Menu, X, History, Flag } from "lucide-react";
 import { AndroidPageHeader } from "../components/AndroidBackButton";
 import { useAuth } from "@/App";
-import { karmaAI, type Message as AIMessage, type Conversation } from "@/services/karmaAIService";
+import { karmaAI, type Message as AIMessage, type Conversation } from "@/services/karmaAIServiceEdge";
 import { useToast } from "@/hooks/use-toast";
+import ServiceReportModal from "../components/ServiceReportModal";
 
 interface DisplayMessage {
   id: string;
@@ -24,6 +25,7 @@ const AskKarmaPage = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [showSidebar, setShowSidebar] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+  const [showReportModal, setShowReportModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -175,7 +177,8 @@ Feel free to ask me anything!`,
       const aiResponse = await karmaAI.generateResponse(
         userMessageContent,
         conversationHistory,
-        userContext
+        userContext,
+        user?.id // Pass user ID to use their API key if available
       );
 
       if (!aiResponse) {
@@ -308,7 +311,7 @@ Feel free to ask me anything!`,
           <div className="p-3">
             <button
               onClick={startNewConversation}
-              className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-2 bg-karma-gold hover:bg-karma-gold/90 text-white py-2.5 px-4 rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span className="text-sm font-medium">New Chat</span>
@@ -375,15 +378,32 @@ Feel free to ask me anything!`,
           subtitle="Your AI Beauty Assistant"
           backTo="/"
           rightContent={
-            <button
-              onClick={() => setShowSidebar(true)}
-              className="text-gray-600 hover:bg-gray-100 p-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center transition-colors"
-              aria-label="Open chat history"
-              title="Chat history"
-            >
-              <History className="w-6 h-6" strokeWidth={2} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="text-gray-600 hover:bg-gray-100 p-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center transition-colors"
+                aria-label="Report issue"
+                title="Report issue"
+              >
+                <Flag className="w-5 h-5" strokeWidth={2} />
+              </button>
+              <button
+                onClick={() => setShowSidebar(true)}
+                className="text-gray-600 hover:bg-gray-100 p-2 rounded-lg min-h-[48px] min-w-[48px] flex items-center justify-center transition-colors"
+                aria-label="Open chat history"
+                title="Chat history"
+              >
+                <History className="w-6 h-6" strokeWidth={2} />
+              </button>
+            </div>
           }
+        />
+        
+        {/* Report Modal */}
+        <ServiceReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          serviceName="ask_karma"
         />
 
         {/* Messages */}
@@ -396,7 +416,7 @@ Feel free to ask me anything!`,
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                   message.is_user_message
-                    ? 'bg-green-500 text-white'
+                    ? 'bg-karma-gold text-white'
                     : 'bg-gray-100 text-gray-800'
                 }`}
               >
@@ -426,9 +446,9 @@ Feel free to ask me anything!`,
               <div className="bg-gray-100 text-gray-800 rounded-2xl px-4 py-3">
                 <div className="flex items-center gap-2">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-karma-gold rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-karma-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-karma-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                   <span className="text-sm text-gray-600">Karma is thinking...</span>
                 </div>
@@ -462,7 +482,7 @@ Feel free to ask me anything!`,
               disabled={!inputText.trim() || isLoading}
               aria-label="Send message"
               title="Send message"
-              className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-3 rounded-full transition-colors flex-shrink-0"
+              className="bg-karma-gold hover:bg-karma-gold/90 disabled:bg-gray-300 disabled:cursor-not-allowed text-white p-3 rounded-full transition-colors flex-shrink-0"
             >
               <Send className="w-5 h-5" />
             </button>

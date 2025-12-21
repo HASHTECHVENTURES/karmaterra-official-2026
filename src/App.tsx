@@ -3,35 +3,54 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
-import { useState, createContext, useContext, useEffect } from "react";
+import { useState, createContext, useContext, useEffect, lazy, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { storage } from "@/lib/config";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import MaintenanceMode from "@/components/MaintenanceMode";
 import type { User, LoginResult, AuthContextType } from "@/types";
 import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { App as CapacitorApp } from "@capacitor/app";
+import { initializePushNotifications } from "@/services/pushNotificationService";
+import { initAnalytics, trackPageView } from "@/lib/analytics";
+// import { CookieConsent } from "@/components/CookieConsent"; // Disabled for now
+// import { GlobalSearch } from "@/components/GlobalSearch"; // Disabled for now
+import { OrganizationSchema, WebSiteSchema } from "@/components/StructuredData";
+import { PageTracker } from "@/components/PageTracker";
+import { SkeletonLoader } from "@/components/SkeletonLoader";
 
-// Pages
-import AuthPage from "./pages/AuthPage";
-import HomePage from "./pages/HomePage";
-import ProfilePage from "./pages/ProfilePage";
-import CommunityPage from "./pages/CommunityPage";
-import HairAnalysisPage from "./pages/HairAnalysisPage";
-import HairAnalysisResultsPage from "./pages/HairAnalysisResultsPage";
-import AskKarmaPage from "./pages/AskKarmaPage";
-import IngredientsPage from "./pages/services/IngredientsPage";
-import KnowYourHairPage from "./pages/services/KnowYourHairPage";
-import MarketPage from "./pages/MarketPage";
-// Removed old Enhanced Skin Analysis pages
-import ProgressTrackingPage from "./pages/ProgressTrackingPage";
-import BlogsPage from "./pages/BlogsPage";
-import BlogDetailPage from "./pages/BlogDetailPage";
-import NotFound from "./pages/NotFound";
-import KnowYourSkinPage from "./pages/services/KnowYourSkinPage";
-import EnhancedSkinAnalysisResultsPage from "./pages/EnhancedSkinAnalysisResultsPage";
-import TermsPage from "./pages/TermsPage";
-import PrivacyPage from "./pages/PrivacyPage";
+// Lazy load pages for code splitting
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const CommunityPage = lazy(() => import("./pages/CommunityPage"));
+const HairAnalysisPage = lazy(() => import("./pages/HairAnalysisPage"));
+const HairAnalysisResultsPage = lazy(() => import("./pages/HairAnalysisResultsPage"));
+const AskKarmaPage = lazy(() => import("./pages/AskKarmaPage"));
+const IngredientsPage = lazy(() => import("./pages/services/IngredientsPage"));
+const KnowYourHairPage = lazy(() => import("./pages/services/KnowYourHairPage"));
+const MarketPage = lazy(() => import("./pages/MarketPage"));
+const ProgressTrackingPage = lazy(() => import("./pages/ProgressTrackingPage"));
+const BlogsPage = lazy(() => import("./pages/BlogsPage"));
+const BlogDetailPage = lazy(() => import("./pages/BlogDetailPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const KnowYourSkinPage = lazy(() => import("./pages/services/KnowYourSkinPage"));
+const EnhancedSkinAnalysisResultsPage = lazy(() => import("./pages/EnhancedSkinAnalysisResultsPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const FeedbackPage = lazy(() => import("./pages/FeedbackPage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center">
+      <SkeletonLoader variant="circle" width="48px" height="48px" className="mx-auto mb-4" />
+      <SkeletonLoader variant="text" width="200px" className="mx-auto" />
+    </div>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -62,7 +81,9 @@ const AndroidBackButtonHandler = () => {
         '/profile',
         '/community',
         '/terms',
-        '/privacy'
+        '/privacy',
+        '/feedback',
+        '/help'
       ];
 
       // Check if we're on a service page
@@ -134,6 +155,9 @@ const App = () => {
       }
     }
     setLoading(false);
+    
+    // Initialize Google Analytics
+    initAnalytics();
   }, []);
 
 
@@ -153,6 +177,16 @@ const App = () => {
     };
     configureStatusBar();
   }, []);
+
+  // Initialize push notifications when user is logged in
+  useEffect(() => {
+    if (user?.id) {
+      console.log('🔔 Initializing push notifications for user:', user.id)
+      initializePushNotifications(user.id).catch((error) => {
+        console.error('❌ Failed to initialize push notifications:', error)
+      })
+    }
+  }, [user?.id]);
 
   const login = async (pin: string, phone_number: string, name?: string, email?: string, gender?: string, birthdate?: string, country?: string, state?: string, city?: string, isSignUpMode?: boolean): Promise<LoginResult> => {
     try {
@@ -418,38 +452,49 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <AuthContext.Provider value={{ user, login, signOut, updateProfile }}>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <AndroidBackButtonHandler />
-              <div className="min-h-screen safe-area-top">
-                <Routes>
-                <Route path="/" element={user ? <HomePage /> : <AuthPage />} />
-                <Route path="/profile" element={user ? <ProfilePage /> : <AuthPage />} />
-                <Route path="/community" element={user ? <CommunityPage /> : <AuthPage />} />
-                <Route path="/know-your-skin" element={<KnowYourSkinPage />} />
-                <Route path="/skin-analysis-results" element={user ? <EnhancedSkinAnalysisResultsPage /> : <AuthPage />} />
-                <Route path="/progress-tracking" element={user ? <ProgressTrackingPage /> : <AuthPage />} />
-                <Route path="/hair-analysis" element={user ? <HairAnalysisPage /> : <AuthPage />} />
-                <Route path="/hair-analysis-results" element={user ? <HairAnalysisResultsPage /> : <AuthPage />} />
-                <Route path="/ask-karma" element={user ? <AskKarmaPage /> : <AuthPage />} />
-                <Route path="/ingredients" element={user ? <IngredientsPage /> : <AuthPage />} />
-                <Route path="/know-your-hair" element={user ? <KnowYourHairPage /> : <AuthPage />} />
-                <Route path="/market" element={user ? <MarketPage /> : <AuthPage />} />
-                <Route path="/blogs" element={user ? <BlogsPage /> : <AuthPage />} />
-                <Route path="/blog/:id" element={user ? <BlogDetailPage /> : <AuthPage />} />
-                <Route path="/terms" element={<TermsPage />} />
-                <Route path="/privacy" element={<PrivacyPage />} />
-                <Route path="*" element={<NotFound />} />
-                </Routes>
-              </div>
-            </BrowserRouter>
-          </AuthContext.Provider>
-        </TooltipProvider>
-      </QueryClientProvider>
+      <MaintenanceMode>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <AuthContext.Provider value={{ user, login, signOut, updateProfile }}>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <AndroidBackButtonHandler />
+                <OrganizationSchema />
+                <WebSiteSchema />
+                <PageTracker />
+                {/* <GlobalSearch /> - Disabled for now */}
+                {/* <CookieConsent /> - Disabled for now */}
+                <div className="min-h-screen safe-area-top">
+                  <Suspense fallback={<PageLoader />}>
+                    <Routes>
+                      <Route path="/" element={user ? <HomePage /> : <AuthPage />} />
+                      <Route path="/profile" element={user ? <ProfilePage /> : <AuthPage />} />
+                      <Route path="/community" element={user ? <CommunityPage /> : <AuthPage />} />
+                      <Route path="/know-your-skin" element={<KnowYourSkinPage />} />
+                      <Route path="/skin-analysis-results" element={user ? <EnhancedSkinAnalysisResultsPage /> : <AuthPage />} />
+                      <Route path="/progress-tracking" element={user ? <ProgressTrackingPage /> : <AuthPage />} />
+                      <Route path="/hair-analysis" element={user ? <HairAnalysisPage /> : <AuthPage />} />
+                      <Route path="/hair-analysis-results" element={user ? <HairAnalysisResultsPage /> : <AuthPage />} />
+                      <Route path="/ask-karma" element={user ? <AskKarmaPage /> : <AuthPage />} />
+                      <Route path="/ingredients" element={user ? <IngredientsPage /> : <AuthPage />} />
+                      <Route path="/know-your-hair" element={user ? <KnowYourHairPage /> : <AuthPage />} />
+                      <Route path="/market" element={user ? <MarketPage /> : <AuthPage />} />
+                      <Route path="/blogs" element={user ? <BlogsPage /> : <AuthPage />} />
+                      <Route path="/blog/:id" element={user ? <BlogDetailPage /> : <AuthPage />} />
+                      <Route path="/terms" element={<TermsPage />} />
+                      <Route path="/privacy" element={<PrivacyPage />} />
+                      <Route path="/feedback" element={user ? <FeedbackPage /> : <AuthPage />} />
+                      <Route path="/help" element={user ? <HelpPage /> : <AuthPage />} />
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </Suspense>
+                </div>
+              </BrowserRouter>
+            </AuthContext.Provider>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MaintenanceMode>
     </ErrorBoundary>
   );
 };

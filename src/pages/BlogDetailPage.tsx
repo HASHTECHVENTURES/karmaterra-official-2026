@@ -26,6 +26,10 @@ const BlogDetailPage = () => {
           console.error('Error fetching blog post:', error);
         } else {
           setPost(data);
+          // If external link exists, redirect immediately
+          if (data?.external_link) {
+            window.location.href = data.external_link;
+          }
         }
       } catch (error) {
         console.error('Error:', error);
@@ -85,7 +89,7 @@ const BlogDetailPage = () => {
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4 text-gray-800">Blog Post Not Found</h1>
-          <Button onClick={() => navigate('/')} className="bg-green-500 hover:bg-green-600">
+          <Button onClick={() => navigate('/')} className="bg-karma-gold hover:bg-karma-gold/90">
             Back to Home
           </Button>
         </div>
@@ -126,7 +130,7 @@ const BlogDetailPage = () => {
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {/* Hero Image */}
           <div className="aspect-[16/9] overflow-hidden">
-            <img 
+            <img loading="lazy" 
               src={post.featured_image} 
               alt={post.title}
               className="w-full h-full object-cover"

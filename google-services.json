@@ -1,0 +1,50 @@
+{
+  "project_info": {
+    "project_number": "360764841050",
+    "project_id": "karmaterra-auth",
+    "storage_bucket": "karmaterra-auth.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360764841050:android:e0d207f7091e00f8008c63",
+        "android_client_info": {
+          "package_name": "com.hashtechventures.karmaterra"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJMgvDqQAJjz3LU1UpTmKuFjKVebTMM5s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360764841050:android:caeae8e01ac586d5008c63",
+        "android_client_info": {
+          "package_name": "www.karmaterra.in"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJMgvDqQAJjz3LU1UpTmKuFjKVebTMM5s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+
+

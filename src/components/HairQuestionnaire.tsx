@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle, User, Droplets, MapPin, Calendar, Heart, Waves, Scissors, Flame, Activity, Sparkles, FlaskConical, Shield } from "lucide-react";
+import { getHairQuestions, HairQuestion as DBHairQuestion } from "@/services/hairQuestionService";
 
 interface HairQuestionnaireProps {
   onComplete: (answers: HairQuestionnaireAnswers) => void;
@@ -171,8 +172,27 @@ const demographicQuestions = [
   }
 ];
 
+// Icon mapping for database icon names
+const iconMap: Record<string, any> = {
+  Waves,
+  Sparkles,
+  Shield,
+  Heart,
+  Droplets,
+  FlaskConical,
+  Scissors,
+  Flame,
+  Activity,
+  Brain: Activity,
+  User,
+  MapPin,
+  Calendar,
+};
+
 const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }: HairQuestionnaireProps) => {
   const [currentStep, setCurrentStep] = useState(0);
+  const [dbQuestions, setDbQuestions] = useState<DBHairQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [answers, setAnswers] = useState<Partial<HairQuestionnaireAnswers>>(() => {
     // Initialize with existingAnswers if provided, otherwise empty object
     if (existingAnswers && Object.keys(existingAnswers).length > 0) {
@@ -180,6 +200,27 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
     }
     return {};
   });
+  
+  // Add Brain icon import
+  const Brain = Activity; // Using Activity as Brain icon
+
+  // Fetch questions from database
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        setLoadingQuestions(true);
+        const questions = await getHairQuestions();
+        setDbQuestions(questions);
+      } catch (error) {
+        console.error('Error loading hair questions:', error);
+        // Fallback to hardcoded questions if database fails
+        setDbQuestions([]);
+      } finally {
+        setLoadingQuestions(false);
+      }
+    };
+    fetchQuestions();
+  }, []);
 
   // Only initialize from existingAnswers on mount, don't reset user's current selections
   useEffect(() => {
@@ -205,8 +246,59 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
 
   const hasMissingData = useMemo(() => Object.values(missingData).some(Boolean), [missingData]);
 
-  // Memoize questions array to prevent rebuilding on every render
+  // Mapping from question text to answer field names (for database questions)
+  const questionToFieldMap: Record<string, keyof HairQuestionnaireAnswers> = {
+    'what is your natural hair type': 'hairType',
+    'what is your hair texture': 'hairTexture',
+    'how thick is your hair overall': 'hairThickness',
+    'what is your scalp condition': 'scalpCondition',
+    'how often do you wash your hair': 'washingFrequency',
+    'what type of hair care products do you primarily use': 'hairCareProducts',
+    'have you had any chemical treatments in the past 6 months': 'chemicalTreatments',
+    'how often do you use heat styling tools': 'heatStylingFrequency',
+    'how would you describe your stress levels': 'stressLevel',
+    'what is the water quality in your city': 'waterQuality',
+    'what is the water quality in your area for hair washing': 'waterQuality',
+  };
+
+  // Memoize questions array - use database questions if available, otherwise fallback to hardcoded
   const allQuestions = useMemo(() => {
+    // If we have database questions, use them
+    if (dbQuestions.length > 0) {
+      const mappedQuestions = dbQuestions.map((q) => {
+        // Map database question to component format
+        const IconComponent = q.icon_name ? iconMap[q.icon_name] || Waves : Waves;
+        
+        // Try to map to existing field name, or create a unique ID
+        const questionTextLower = q.question_text.toLowerCase().trim();
+        const questionId = questionToFieldMap[questionTextLower] || 
+          q.question_text.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        
+        return {
+          id: questionId,
+          title: q.question_text,
+          icon: IconComponent,
+          options: q.answer_options || [],
+          type: q.question_type === 'text' ? 'text' : q.question_type === 'multiple_choice' ? 'multiple' : 'single',
+          helpText: q.help_text,
+          isRequired: q.is_required,
+        };
+      });
+      
+      // Add demographic questions if needed
+      if (hasMissingData) {
+        if (missingData.gender) mappedQuestions.push(demographicQuestions[0]);
+        if (missingData.birthdate) mappedQuestions.push(demographicQuestions[1]);
+        if (missingData.city) mappedQuestions.push(demographicQuestions[2]);
+        if (missingData.state) mappedQuestions.push(demographicQuestions[3]);
+      }
+      
+      return mappedQuestions;
+    }
+    
+    // Fallback to hardcoded questions if database is empty or failed
     const questions = [...baseQuestions];
     
     if (hasMissingData) {
@@ -218,16 +310,17 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
     }
     
     return questions;
-  }, [hasMissingData, missingData]);
-
-  const currentQuestion = allQuestions[currentStep];
+  }, [dbQuestions, hasMissingData, missingData]);
 
   // Debug: Log current answer when question changes
   useEffect(() => {
-    const currentAnswer = answers[currentQuestion.id as keyof HairQuestionnaireAnswers];
-    console.log(`🔍 Question ${currentStep + 1} (${currentQuestion.id}): Current answer =`, currentAnswer);
-    console.log('📝 All answers so far:', answers);
-  }, [currentStep, currentQuestion.id, answers]);
+    if (allQuestions.length > 0 && currentStep < allQuestions.length) {
+      const currentQuestion = allQuestions[currentStep];
+      const currentAnswer = answers[currentQuestion.id as keyof HairQuestionnaireAnswers];
+      console.log(`🔍 Question ${currentStep + 1} (${currentQuestion.id}): Current answer =`, currentAnswer);
+      console.log('📝 All answers so far:', answers);
+    }
+  }, [currentStep, allQuestions, answers]);
 
   const handleAnswer = (answer: string) => {
     setAnswers(prev => {
@@ -276,7 +369,38 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
     }
   };
 
-  const progress = ((currentStep + 1) / allQuestions.length) * 100;
+  const progress = allQuestions.length > 0 ? ((currentStep + 1) / allQuestions.length) * 100 : 0;
+
+  // Show loading state
+  if (loadingQuestions) {
+    return (
+      <div className="bg-gradient-to-br from-karma-cream via-background to-karma-light-gold p-6 rounded-2xl">
+        <div className="text-center py-12">
+          <div className="w-8 h-8 border-4 border-karma-green border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if no questions available
+  if (allQuestions.length === 0) {
+    return (
+      <div className="bg-gradient-to-br from-karma-cream via-background to-karma-light-gold p-6 rounded-2xl">
+        <div className="text-center py-12">
+          <p className="text-red-600 mb-4">No questions available. Please add questions in the admin panel.</p>
+          <button
+            onClick={onBack}
+            className="px-4 py-2 bg-karma-green text-white rounded-lg"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const currentQuestion = allQuestions[currentStep];
 
   return (
     <div className="bg-gradient-to-br from-karma-cream via-background to-karma-light-gold p-6 rounded-2xl">
@@ -316,9 +440,12 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
         <div className="bg-white rounded-2xl p-8 shadow-lg mb-8">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-karma-light-green rounded-full flex items-center justify-center mx-auto mb-4">
-              <currentQuestion.icon className="w-8 h-8 text-karma-green" />
+              {currentQuestion.icon && <currentQuestion.icon className="w-8 h-8 text-karma-green" />}
             </div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">{currentQuestion.title}</h2>
+            {currentQuestion.helpText && (
+              <p className="text-sm text-gray-500 mb-2">{currentQuestion.helpText}</p>
+            )}
             <p className="text-gray-600">
               Question {currentStep + 1} of {allQuestions.length}
             </p>
@@ -342,7 +469,7 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
                 placeholder={`Enter your ${currentQuestion.id}`}
                 className="w-full h-12 bg-gray-50 border border-gray-200 rounded-lg focus:border-karma-green focus:ring-karma-green px-4"
               />
-            ) : (
+            ) : currentQuestion.options && currentQuestion.options.length > 0 ? (
               currentQuestion.options.map((option) => {
                 const currentAnswer = answers[currentQuestion.id as keyof HairQuestionnaireAnswers];
                 // Ensure both are strings for comparison
@@ -365,6 +492,8 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
                   </button>
                 );
               })
+            ) : (
+              <p className="text-gray-500 text-center py-4">No answer options configured for this question.</p>
             )}
           </div>
         </div>

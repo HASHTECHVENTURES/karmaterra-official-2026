@@ -4,7 +4,7 @@ import { AndroidPageHeader } from "../components/AndroidBackButton";
 const PrivacyPage = () => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50">
+    <div className="min-h-screen bg-background">
       {/* Android Material Design Header */}
       <AndroidPageHeader
         title="Privacy Policy"

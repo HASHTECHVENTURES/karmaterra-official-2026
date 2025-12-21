@@ -79,7 +79,7 @@ const ProgressTrackingPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-green-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your progress...</p>
@@ -89,7 +89,7 @@ const ProgressTrackingPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-green-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-40 header-safe-area">
         <div className="max-w-md mx-auto px-4 py-4">
@@ -120,7 +120,7 @@ const ProgressTrackingPage = () => {
             </p>
             <button
               onClick={() => navigate('/know-your-skin')}
-              className="px-6 py-2 bg-blue-500 text-white rounded-full font-semibold hover:bg-blue-600 transition-all"
+              className="px-6 py-2 bg-karma-gold text-white rounded-full font-semibold hover:bg-karma-gold/90 transition-all"
             >
               Take Another Analysis
             </button>
@@ -230,7 +230,7 @@ const ProgressTrackingPage = () => {
               <p className="text-sm text-gray-500">Start your skin journey with your first analysis</p>
               <button
                 onClick={() => navigate('/know-your-skin')}
-                className="mt-4 px-6 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+                className="mt-4 px-6 py-2 bg-karma-gold hover:bg-karma-gold/90 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
               >
                 Start Analysis
               </button>
@@ -307,7 +307,7 @@ const ProgressTrackingPage = () => {
         <div className="grid grid-cols-1 gap-4">
           <button
             onClick={() => navigate('/know-your-skin')}
-            className="p-4 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+            className="p-4 bg-karma-gold hover:bg-karma-gold/90 text-white rounded-xl font-semibold hover:shadow-lg transition-all"
           >
             New Analysis
           </button>

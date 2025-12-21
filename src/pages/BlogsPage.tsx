@@ -13,11 +13,14 @@ const BlogsPage = () => {
     fetchBlogs();
   }, []);
 
+  const [categories, setCategories] = useState<string[]>(['All']);
+
   const fetchBlogs = async () => {
     try {
+      // Optimized: Only select needed fields
       const { data, error } = await supabase
         .from('blog_posts')
-        .select('*')
+        .select('id, title, slug, excerpt, featured_image, is_published, published_at, external_link, category, created_at')
         .eq('is_published', true)
         .order('published_at', { ascending: false });
 
@@ -30,29 +33,73 @@ const BlogsPage = () => {
     }
   };
 
-  const categories = ["All", ...Array.from(new Set(blogs.map(blog => blog.category)))];
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('blog_categories')
+        .select('name')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+
+      if (error) throw error;
+      if (data) {
+        const categoryNames = data.map(cat => cat.name);
+        setCategories(['All', ...categoryNames]);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      // Fallback: extract from blogs if categories table doesn't exist
+      const blogCategories = Array.from(new Set(blogs.map(blog => blog.category).filter(Boolean)));
+      if (blogCategories.length > 0) {
+        setCategories(['All', ...blogCategories]);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchBlogs();
+  }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [blogs]);
   
   const filteredBlogs = selectedCategory === "All" 
     ? blogs 
     : blogs.filter(blog => blog.category === selectedCategory);
 
-  const handleBlogClick = (blogId: string) => {
-    navigate(`/blog/${blogId}`);
+  const handleBlogClick = (blog: any) => {
+    // If external link exists, open it in a new tab
+    if (blog.external_link) {
+      window.open(blog.external_link, '_blank', 'noopener,noreferrer');
+    } else {
+      // Otherwise, navigate to internal blog detail page
+      navigate(`/blog/${blog.id}`);
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading blogs...</p>
+      <div className="min-h-screen bg-background">
+        <div className="bg-white border-b border-gray-200 sticky top-0 z-10 header-safe-area">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <SkeletonLoader variant="text" width="200px" className="mb-2" />
+            <SkeletonLoader variant="text" width="150px" />
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <CardSkeleton key={i} />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-purple-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 header-safe-area">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -106,12 +153,12 @@ const BlogsPage = () => {
             {filteredBlogs.map((blog) => (
               <div
                 key={blog.id}
-                onClick={() => handleBlogClick(blog.id)}
+                onClick={() => handleBlogClick(blog)}
                 className="bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
               >
                 {/* Blog Image */}
                 <div className="relative h-48 overflow-hidden">
-                  <img
+                  <img loading="lazy"
                     src={blog.featured_image}
                     alt={blog.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"

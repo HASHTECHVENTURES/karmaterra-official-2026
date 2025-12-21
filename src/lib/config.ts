@@ -3,11 +3,11 @@
 
 export const config = {
   gemini: {
-    apiKey: import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyAbJINoNUa_H8UCfdpjstcWJS2ZMjDB3mQ',
+    apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
   },
   supabase: {
-    url: import.meta.env.VITE_SUPABASE_URL || 'https://aagehceioskhyxvtolfz.supabase.co',
-    anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhZ2VoY2Vpb3NraHl4dnRvbGZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzYxNjI0NzMsImV4cCI6MjA1MTczODQ3M30.I1LGLUzZfM31uM0Oz2i5CwFl9Ck4cfY42j8u3R2N4NU',
+    url: import.meta.env.VITE_SUPABASE_URL || '',
+    anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
   },
   rapidApi: {
     key: import.meta.env.VITE_RAPIDAPI_KEY || '',

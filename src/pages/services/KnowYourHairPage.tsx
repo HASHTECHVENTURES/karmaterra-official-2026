@@ -1,15 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Waves, Zap, Sun, Wind, Camera, Sparkles, CheckCircle, Star, Heart, Shield, Droplets, Scissors, ShoppingBag } from "lucide-react";
+import { Waves, Zap, Sun, Wind, Camera, Sparkles, CheckCircle, Star, Heart, Shield, Droplets, Scissors, ShoppingBag, ExternalLink, Flag } from "lucide-react";
 import { AndroidPageHeader } from "../../components/AndroidBackButton";
+import { getAllHairProducts, HairProduct } from "@/services/hairService";
+import { Browser } from "@capacitor/browser";
+import ServiceReportModal from "../../components/ServiceReportModal";
 
 const KnowYourHairPage = () => {
   const navigate = useNavigate();
   const [selectedHairType, setSelectedHairType] = useState<string | null>(null);
   const [showCareTips, setShowCareTips] = useState<string | null>(null);
   const [showShopView, setShowShopView] = useState(false);
+  const [hairProducts, setHairProducts] = useState<Record<string, HairProduct[]>>({});
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const hairTypes = [
     {
@@ -86,19 +92,68 @@ const KnowYourHairPage = () => {
     }
   ];
 
+  // Fetch hair products from database
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const grouped = await getAllHairProducts();
+        setHairProducts(grouped);
+      } catch (error) {
+        console.error('Error fetching hair products:', error);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const handleProductClick = async (product: HairProduct) => {
+    if (product.product_link) {
+      try {
+        await Browser.open({ url: product.product_link });
+      } catch (error) {
+        console.error('Error opening product link:', error);
+      }
+    }
+  };
+
+  // Get all products (no hair type filtering)
+  const getAllProducts = (): HairProduct[] => {
+    // Return all products from 'all' key (no categorization)
+    return hairProducts['all'] || [];
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-green-50">
+    <div className="min-h-screen bg-background">
       {/* Android Material Design Header */}
       <AndroidPageHeader
         title="Know Your Hair"
         subtitle="Discover your hair type & care routine"
         backTo="/"
+        rightContent={
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Report issue"
+            title="Report issue"
+          >
+            <Flag className="w-5 h-5 text-gray-600" />
+          </button>
+        }
+      />
+      
+      {/* Report Modal */}
+      <ServiceReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        serviceName="know_your_hair"
       />
 
       <div className="max-w-md mx-auto px-4 py-6 sm:max-w-lg md:max-w-2xl">
         {/* Hero Section */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-20 h-20 bg-karma-gold rounded-full flex items-center justify-center mx-auto mb-4">
             <Sparkles className="w-10 h-10 text-white" />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Discover Your Hair Type</h2>
@@ -112,7 +167,7 @@ const KnowYourHairPage = () => {
               key={hair.id}
               className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-300 cursor-pointer ${
                 selectedHairType === hair.id
-                  ? 'border-purple-500 bg-purple-50 shadow-lg scale-105'
+                  ? 'border-karma-gold bg-karma-light-gold shadow-lg scale-105'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
               }`}
               onClick={() => setSelectedHairType(selectedHairType === hair.id ? null : hair.id)}
@@ -129,7 +184,7 @@ const KnowYourHairPage = () => {
                     </div>
                   </div>
                   {selectedHairType === hair.id && (
-                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                    <div className="w-8 h-8 bg-karma-gold rounded-full flex items-center justify-center">
                       <CheckCircle className="w-5 h-5 text-white" />
                     </div>
                   )}
@@ -179,20 +234,51 @@ const KnowYourHairPage = () => {
                       </div>
                     )}
 
-                    {/* Recommended Products */}
-                    <div className="mt-4">
-                      <h5 className="font-semibold text-gray-800 mb-2">Recommended Products:</h5>
-                      <div className="flex flex-wrap gap-2">
-                        {hair.products.map((product, idx) => (
-                          <span
-                            key={idx}
-                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm"
-                          >
-                            {product}
-                          </span>
-                        ))}
+                    {/* Recommended Products - Show all products for all hair types */}
+                    {selectedHairType === hair.id && (
+                      <div className="mt-4">
+                        <h5 className="font-semibold text-gray-800 mb-2">Recommended Products:</h5>
+                        {loadingProducts ? (
+                          <div className="text-sm text-gray-500">Loading products...</div>
+                        ) : getAllProducts().length > 0 ? (
+                          <div className="space-y-2">
+                            {getAllProducts().map((product) => (
+                              <div
+                                key={product.id}
+                                className="flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200 hover:border-purple-400 transition-colors"
+                              >
+                                <div className="flex-1">
+                                  <h6 className="font-semibold text-gray-800 text-sm">{product.product_name}</h6>
+                                  {product.product_description && (
+                                    <p className="text-xs text-gray-600 mt-1">{product.product_description}</p>
+                                  )}
+                                </div>
+                                {product.product_link && (
+                                  <button
+                                    onClick={() => handleProductClick(product)}
+                                    className="ml-2 p-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+                                    title="View Product"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {hair.products.map((product, idx) => (
+                              <span
+                                key={idx}
+                                className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm"
+                              >
+                                {product}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -214,13 +300,13 @@ const KnowYourHairPage = () => {
             </div>
             <Button
               onClick={() => navigate('/hair-analysis')}
-              className="w-full bg-white text-purple-600 hover:bg-gray-100 font-semibold"
+              className="w-full bg-white text-karma-brown hover:bg-gray-100 font-semibold"
             >
               Start Hair Analysis
             </Button>
           </div>
 
-          <div className="bg-gradient-to-r from-green-500 to-teal-500 rounded-2xl p-6 text-white">
+          <div className="bg-karma-green rounded-2xl p-6 text-white">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
                 <Heart className="w-6 h-6" />
