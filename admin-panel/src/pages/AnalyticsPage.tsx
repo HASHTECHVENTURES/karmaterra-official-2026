@@ -267,65 +267,65 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Service Usage Breakdown */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 overflow-hidden">
           <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5" />
+            <Activity className="w-5 h-5 flex-shrink-0" />
             Service Usage
           </h2>
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-orange-500" />
-                  <span className="text-sm font-medium text-gray-700">Know Your Skin</span>
+            <div className="min-w-0">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Sparkles className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 truncate">Know Your Skin</span>
                 </div>
-                <span className="text-sm text-gray-600 font-semibold">{stats?.serviceUsage?.skin || 0}</span>
+                <span className="text-sm text-gray-600 font-semibold flex-shrink-0">{stats?.serviceUsage?.skin || 0}</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-orange-500 h-2 rounded-full"
+                  className="bg-orange-500 h-2 rounded-full max-w-full"
                   style={{ 
-                    width: `${stats?.totalAnalyses ? ((stats.serviceUsage?.skin || 0) / stats.totalAnalyses * 100) : 0}%` 
+                    width: `${Math.min(stats?.totalAnalyses ? ((stats.serviceUsage?.skin || 0) / stats.totalAnalyses * 100) : 0, 100)}%` 
                   }}
                 ></div>
               </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Scissors className="w-4 h-4 text-purple-500" />
-                  <span className="text-sm font-medium text-gray-700">Know Your Hair</span>
+            <div className="min-w-0">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Scissors className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 truncate">Know Your Hair</span>
                 </div>
-                <span className="text-sm text-gray-600 font-semibold">{stats?.serviceUsage?.hair || 0}</span>
+                <span className="text-sm text-gray-600 font-semibold flex-shrink-0">{stats?.serviceUsage?.hair || 0}</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-purple-500 h-2 rounded-full"
+                  className="bg-purple-500 h-2 rounded-full max-w-full"
                   style={{ 
-                    width: `${stats?.totalAnalyses ? ((stats.serviceUsage?.hair || 0) / stats.totalAnalyses * 100) : 0}%` 
+                    width: `${Math.min(stats?.totalAnalyses ? ((stats.serviceUsage?.hair || 0) / stats.totalAnalyses * 100) : 0, 100)}%` 
                   }}
                 ></div>
               </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-medium text-gray-700">Ask Karma</span>
+            <div className="min-w-0">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <MessageSquare className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 truncate">Ask Karma</span>
                 </div>
-                <span className="text-sm text-gray-600 font-semibold">{stats?.serviceUsage?.askKarma || 0}</span>
+                <span className="text-sm text-gray-600 font-semibold flex-shrink-0">{stats?.serviceUsage?.askKarma || 0}</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-2 rounded-full"
+                  className="bg-blue-500 h-2 rounded-full max-w-full"
                   style={{ 
-                    width: `${stats?.totalUsers ? ((stats.serviceUsage?.askKarma || 0) / stats.totalUsers * 100) : 0}%` 
+                    width: `${Math.min(stats?.totalUsers ? ((stats.serviceUsage?.askKarma || 0) / stats.totalUsers * 100) : 0, 100)}%` 
                   }}
                 ></div>
               </div>
             </div>
             <div className="pt-2 border-t border-gray-200">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 truncate">
                 Most Popular: <span className="font-semibold text-gray-700">{stats?.mostPopularService || 'N/A'}</span>
               </p>
             </div>
