@@ -22,3 +22,5 @@ CREATE POLICY "Authenticated users can manage user_api_key_assignments" ON user_
   WITH CHECK (auth.role() = 'authenticated');
 
 
+
+

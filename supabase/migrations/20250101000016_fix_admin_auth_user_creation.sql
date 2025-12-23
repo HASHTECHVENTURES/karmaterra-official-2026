@@ -60,3 +60,5 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Note: Admin users created via Supabase Dashboard will work fine
 -- They use Supabase Auth directly and don't need profiles table entries
 
+
+

@@ -11,3 +11,5 @@ ALTER COLUMN content DROP NOT NULL;
 COMMENT ON COLUMN blog_posts.content IS 'Blog post content (HTML/text). Optional for external blog links.';
 
 
+
+

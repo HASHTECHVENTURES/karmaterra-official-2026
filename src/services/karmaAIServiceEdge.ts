@@ -217,3 +217,5 @@ export class KarmaAIService {
 export const karmaAI = new KarmaAIService()
 
 
+
+

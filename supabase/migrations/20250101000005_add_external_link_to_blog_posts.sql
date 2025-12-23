@@ -11,3 +11,5 @@ ADD COLUMN IF NOT EXISTS external_link TEXT;
 COMMENT ON COLUMN blog_posts.external_link IS 'External URL where users will be redirected when clicking the blog card. If provided, blog card will link to this URL instead of internal page.';
 
 
+
+

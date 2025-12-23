@@ -21,3 +21,5 @@ COMMENT ON COLUMN notifications.image_url IS 'URL of the image/banner to display
 COMMENT ON COLUMN notifications.priority IS 'Notification priority: high (urgent), normal (default), low (marketing)';
 COMMENT ON COLUMN notifications.template_name IS 'Name of the template used to create this notification (e.g., order_confirmed, promo_code, reminder)';
 
+
+

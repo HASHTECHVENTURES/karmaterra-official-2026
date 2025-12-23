@@ -33,3 +33,6 @@ dist-ssr
 android/
 ios/
 .capacitor
+
+# APK files
+*.apk

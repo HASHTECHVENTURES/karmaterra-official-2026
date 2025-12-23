@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Send, Bell, Users, RefreshCw, X, Search, Image as ImageIcon, FileText, Sparkles, Trash2 } from 'lucide-react'
+import { Plus, Send, Bell, Users, RefreshCw, X, Search, Image as ImageIcon, FileText, Sparkles, Trash2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Notification {
@@ -115,6 +115,8 @@ const NOTIFICATION_TEMPLATES = {
 
 export default function NotificationsPage() {
   const [showAddForm, setShowAddForm] = useState(false)
+  const [sendingNotificationId, setSendingNotificationId] = useState<string | null>(null)
+  const [showDeviceDetails, setShowDeviceDetails] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: notifications, isLoading } = useQuery({
@@ -130,20 +132,73 @@ export default function NotificationsPage() {
     },
   })
 
-  // Check device tokens count
-  const { data: deviceTokensCount } = useQuery({
+  // Check device tokens count - get both total devices and unique users
+  const { data: deviceStats } = useQuery({
     queryKey: ['device-tokens-count'],
     queryFn: async () => {
-      const { count, error } = await supabase
+      // Get total device tokens count
+      const { count: totalDevices, error: countError } = await supabase
         .from('device_tokens')
         .select('*', { count: 'exact', head: true })
       
-      if (error) {
-        console.error('Error counting device tokens:', error)
-        return 0
+      if (countError) {
+        console.error('Error counting device tokens:', countError)
+        return { totalDevices: 0, uniqueUsers: 0 }
       }
-      return count || 0
+
+      // Get unique users count (users who have at least one device token)
+      const { count: uniqueUsers, error: usersError } = await supabase
+        .from('device_tokens')
+        .select('user_id', { count: 'exact', head: true })
+      
+      if (usersError) {
+        console.error('Error counting unique users:', usersError)
+        return { totalDevices: totalDevices || 0, uniqueUsers: 0 }
+      }
+
+      // Actually count distinct users properly
+      const { data: distinctUsers, error: distinctError } = await supabase
+        .from('device_tokens')
+        .select('user_id')
+      
+      if (distinctError) {
+        console.error('Error getting distinct users:', distinctError)
+        return { totalDevices: totalDevices || 0, uniqueUsers: 0 }
+      }
+
+      const uniqueUserIds = new Set(distinctUsers?.map(d => d.user_id) || [])
+      
+      return {
+        totalDevices: totalDevices || 0,
+        uniqueUsers: uniqueUserIds.size
+      }
     },
+  })
+
+  // Fetch device tokens with user details
+  const { data: deviceTokensData } = useQuery({
+    queryKey: ['device-tokens-details'],
+    queryFn: async () => {
+      const { data: tokens, error } = await supabase
+        .from('device_tokens')
+        .select(`
+          id,
+          user_id,
+          token,
+          platform,
+          last_used,
+          created_at,
+          profiles(phone_number, full_name)
+        `)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('Error fetching device tokens:', error)
+        return []
+      }
+      return tokens || []
+    },
+    enabled: showDeviceDetails,
   })
 
   const deleteMutation = useMutation({
@@ -177,8 +232,80 @@ export default function NotificationsPage() {
     },
   })
 
+  const deleteDeviceTokenMutation = useMutation({
+    mutationFn: async (tokenId: string) => {
+      const { error } = await supabase
+        .from('device_tokens')
+        .delete()
+        .eq('id', tokenId)
+      
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('Device token deleted')
+      queryClient.invalidateQueries({ queryKey: ['device-tokens-count'] })
+      queryClient.invalidateQueries({ queryKey: ['device-tokens-details'] })
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to delete device token')
+    },
+  })
+
+  const cleanupOldTokensMutation = useMutation({
+    mutationFn: async () => {
+      // Get all device tokens grouped by user_id and platform
+      const { data: allTokens, error: fetchError } = await supabase
+        .from('device_tokens')
+        .select('id, user_id, platform, last_used, created_at')
+        .order('last_used', { ascending: false })
+      
+      if (fetchError) throw fetchError
+      if (!allTokens || allTokens.length === 0) return { deleted: 0 }
+
+      // Group by user_id and platform, keep only the most recent one
+      const tokensToKeep = new Set<string>()
+      const tokensToDelete: string[] = []
+      const seen = new Map<string, boolean>() // key: user_id:platform
+
+      for (const token of allTokens) {
+        const key = `${token.user_id}:${token.platform}`
+        if (!seen.has(key)) {
+          // Keep the first (most recent) token for this user+platform
+          tokensToKeep.add(token.id)
+          seen.set(key, true)
+        } else {
+          // Mark older tokens for deletion
+          tokensToDelete.push(token.id)
+        }
+      }
+
+      if (tokensToDelete.length === 0) {
+        return { deleted: 0, message: 'No duplicate tokens found' }
+      }
+
+      // Delete old tokens
+      const { error: deleteError } = await supabase
+        .from('device_tokens')
+        .delete()
+        .in('id', tokensToDelete)
+      
+      if (deleteError) throw deleteError
+
+      return { deleted: tokensToDelete.length }
+    },
+    onSuccess: (result: any) => {
+      toast.success(`Cleaned up ${result.deleted || 0} old/duplicate device token(s)`)
+      queryClient.invalidateQueries({ queryKey: ['device-tokens-count'] })
+      queryClient.invalidateQueries({ queryKey: ['device-tokens-details'] })
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to cleanup old tokens')
+    },
+  })
+
   const sendMutation = useMutation({
     mutationFn: async (id: string) => {
+      setSendingNotificationId(id)
       try {
         // Call the edge function to send push notifications
         const { data, error } = await supabase.functions.invoke('send-push-notification', {
@@ -229,10 +356,12 @@ export default function NotificationsPage() {
       }
     },
     onSuccess: () => {
+      setSendingNotificationId(null)
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
       queryClient.invalidateQueries({ queryKey: ['device-tokens-count'] })
     },
     onError: (error: any) => {
+      setSendingNotificationId(null)
       console.error('❌ Send notification error:', error)
       toast.error(error.message || 'Failed to send notification')
     },
@@ -248,19 +377,116 @@ export default function NotificationsPage() {
         <div>
           <div className="mb-8"><h1 className="text-3xl font-bold text-gray-900 mb-2">Notifications</h1><p className="text-gray-600">Manage and view Notifications</p></div>
           <p className="text-sm text-gray-600 mt-1">
-            {deviceTokensCount !== undefined && (
-              <span className="flex items-center gap-2 mt-2">
-                <Bell className="w-4 h-4" />
-                {deviceTokensCount === 0 ? (
-                  <span className="text-orange-600 font-medium">
-                    No devices registered. Users need to log into the app first.
-                  </span>
-                ) : (
-                  <span className="text-[#d4a574] font-medium">
-                    {deviceTokensCount} device(s) ready to receive notifications
-                  </span>
+            {deviceStats !== undefined && (
+              <div className="flex flex-col gap-2 mt-2">
+                <button
+                  onClick={() => setShowDeviceDetails(!showDeviceDetails)}
+                  className="flex items-center gap-2 text-left hover:underline"
+                >
+                  <Bell className="w-4 h-4" />
+                  {deviceStats.totalDevices === 0 ? (
+                    <span className="text-orange-600 font-medium">
+                      No devices registered. Users need to log into the app first.
+                    </span>
+                  ) : (
+                    <span className="text-[#d4a574] font-medium cursor-pointer">
+                      {deviceStats.uniqueUsers} user{deviceStats.uniqueUsers !== 1 ? 's' : ''} with {deviceStats.totalDevices} device{deviceStats.totalDevices !== 1 ? 's' : ''} ready to receive notifications
+                      <span className="ml-2 text-xs text-gray-500">(Click to view details)</span>
+                    </span>
+                  )}
+                </button>
+                
+                {showDeviceDetails && deviceStats.totalDevices > 0 && (
+                  <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">Device Tokens Details</h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Multiple tokens per user may indicate app reinstalls. Use "Cleanup" to keep only the most recent token per user+platform.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (confirm('This will delete old/duplicate device tokens, keeping only the most recent token for each user+platform combination. Continue?')) {
+                              cleanupOldTokensMutation.mutate()
+                            }
+                          }}
+                          disabled={cleanupOldTokensMutation.isPending}
+                          className="px-3 py-1.5 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 disabled:opacity-50 flex items-center gap-1"
+                          title="Remove old/duplicate tokens (keeps only the most recent token per user+platform)"
+                        >
+                          {cleanupOldTokensMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Cleaning...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="w-3 h-3" />
+                              Cleanup Old Tokens
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setShowDeviceDetails(false)}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                    {deviceTokensData === undefined ? (
+                      <div className="text-center py-4 text-gray-500">Loading device details...</div>
+                    ) : deviceTokensData.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">No device tokens found</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {deviceTokensData.map((device: any) => (
+                          <div key={device.id} className="border-b border-gray-100 pb-3 last:border-0">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-medium text-gray-900">
+                                    {device.profiles?.full_name || 'No Name'}
+                                  </span>
+                                  <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">
+                                    {device.platform}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-600 mb-1">
+                                  Phone: {device.profiles?.phone_number || 'N/A'}
+                                </p>
+                                <p className="text-xs text-gray-500 font-mono break-all">
+                                  Token: {device.token.substring(0, 50)}...
+                                </p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  Created: {new Date(device.created_at).toLocaleString()}
+                                  {device.last_used && (
+                                    <> • Last used: {new Date(device.last_used).toLocaleString()}</>
+                                  )}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to delete this device token? This will prevent notifications from being sent to this device.')) {
+                                    deleteDeviceTokenMutation.mutate(device.id)
+                                  }
+                                }}
+                                disabled={deleteDeviceTokenMutation.isPending}
+                                className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50"
+                                title="Delete this device token"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
-              </span>
+              </div>
             )}
           </p>
         </div>
@@ -270,10 +496,11 @@ export default function NotificationsPage() {
               queryClient.invalidateQueries({ queryKey: ['device-tokens-count'] })
               toast.info('Refreshed device count')
             }}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 font-medium shadow-sm"
             title="Refresh device count"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-5 h-5 text-gray-600" />
+            <span>Refresh</span>
           </button>
           <button
             onClick={() => setShowAddForm(true)}
@@ -358,12 +585,21 @@ export default function NotificationsPage() {
                 {!notification.sent_at && (
                   <button
                     onClick={() => sendMutation.mutate(notification.id)}
-                    disabled={deviceTokensCount === 0}
+                    disabled={deviceStats?.totalDevices === 0 || sendingNotificationId === notification.id}
                     className="flex items-center gap-2 px-4 py-2 bg-[#d4a574] text-white rounded-lg hover:bg-[#d4a574]/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={deviceTokensCount === 0 ? 'No devices registered yet' : 'Send notification'}
+                    title={deviceStats?.totalDevices === 0 ? 'No devices registered yet' : 'Send notification'}
                   >
-                    <Send className="w-4 h-4" />
-                    Send Now
+                    {sendingNotificationId === notification.id ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Send Now
+                      </>
+                    )}
                   </button>
                 )}
                 <button
@@ -900,4 +1136,7 @@ function NotificationForm({
     </div>
   )
 }
+
+
+
 

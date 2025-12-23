@@ -33,3 +33,5 @@ ON storage.objects FOR DELETE
 USING (bucket_id = 'knowledge-base');
 
 
+
+

@@ -11,3 +11,5 @@ ADD COLUMN IF NOT EXISTS blog_banner_image TEXT;
 COMMENT ON COLUMN app_config.blog_banner_image IS 'URL of the banner image displayed in the "Latest Blog Posts" section on the homepage.';
 
 
+
+
