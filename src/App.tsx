@@ -13,6 +13,7 @@ import { Capacitor } from "@capacitor/core";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { App as CapacitorApp } from "@capacitor/app";
 import { initializePushNotifications } from "@/services/pushNotificationService";
+import { Camera } from "@capacitor/camera";
 import { initAnalytics, trackPageView } from "@/lib/analytics";
 // import { CookieConsent } from "@/components/CookieConsent"; // Disabled for now
 // import { GlobalSearch } from "@/components/GlobalSearch"; // Disabled for now
@@ -143,18 +144,69 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user session using safe storage wrapper
-    const storedUser = storage.get('karma-terra-user');
-    if (storedUser) {
-      try {
-        const userData = JSON.parse(storedUser);
-        setUser(userData);
-      } catch (error) {
-        // Invalid JSON, clear it
+    // Check for stored user session and validate it exists in database
+    const checkStoredUser = async () => {
+      // Check app version - clear session if version changed (fresh install or update)
+      const currentVersion = '3.11.0'; // Update this when app version changes
+      const storedVersion = storage.get('karma-terra-app-version');
+      
+      if (storedVersion !== currentVersion) {
+        // App was updated or fresh install - clear all stored data
+        console.log('App version changed or fresh install, clearing stored session');
         storage.remove('karma-terra-user');
+        storage.set('karma-terra-app-version', currentVersion);
+        setUser(null);
+        setLoading(false);
+        initAnalytics();
+        return;
       }
-    }
-    setLoading(false);
+      
+      const storedUser = storage.get('karma-terra-user');
+      if (storedUser) {
+        try {
+          const userData = JSON.parse(storedUser);
+          
+          // Validate user still exists in database
+          if (userData.id) {
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('id, phone_number, full_name, email')
+              .eq('id', userData.id)
+              .maybeSingle();
+            
+            if (error || !profile) {
+              // User doesn't exist in database, clear stored session
+              console.log('Stored user not found in database, clearing session');
+              storage.remove('karma-terra-user');
+              setUser(null);
+            } else {
+              // User exists, restore session
+              // Update user data with latest from database
+              const firstName = profile.full_name ? profile.full_name.split(' ')[0] : "User";
+              const updatedUserData: User = {
+                ...userData,
+                name: firstName,
+                phone_number: profile.phone_number,
+                email: profile.email
+              };
+              setUser(updatedUserData);
+            }
+          } else {
+            // Invalid user data, clear it
+            storage.remove('karma-terra-user');
+            setUser(null);
+          }
+        } catch (error) {
+          // Invalid JSON, clear it
+          console.error('Error parsing stored user:', error);
+          storage.remove('karma-terra-user');
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+    
+    checkStoredUser();
     
     // Initialize Google Analytics
     initAnalytics();
@@ -226,12 +278,31 @@ const App = () => {
           return { success: false, error: 'Invalid PIN format. Please enter exactly 4 digits.' };
         }
 
-        // Convert birthdate from DD/MM/YYYY to YYYY-MM-DD format for PostgreSQL
+        // Format birthdate for PostgreSQL (YYYY-MM-DD)
         let formattedBirthdate = birthdate?.trim() || '';
-        if (formattedBirthdate && formattedBirthdate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-          // Parse DD/MM/YYYY and convert to YYYY-MM-DD
-          const [day, month, year] = formattedBirthdate.split('/');
-          formattedBirthdate = `${year}-${month}-${day}`;
+        if (formattedBirthdate) {
+          // If already in YYYY-MM-DD format (from date input), use as is
+          if (formattedBirthdate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Already in correct format, use directly
+            formattedBirthdate = formattedBirthdate;
+          } 
+          // If in DD/MM/YYYY format (legacy support), convert to YYYY-MM-DD
+          else if (formattedBirthdate.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            const [day, month, year] = formattedBirthdate.split('/');
+            formattedBirthdate = `${year}-${month}-${day}`;
+          }
+          // If in DD-MM-YYYY format, convert to YYYY-MM-DD
+          else if (formattedBirthdate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            const [day, month, year] = formattedBirthdate.split('-');
+            formattedBirthdate = `${year}-${month}-${day}`;
+          }
+          // Try to parse as valid date and format
+          else {
+            const dateObj = new Date(formattedBirthdate);
+            if (!isNaN(dateObj.getTime())) {
+              formattedBirthdate = dateObj.toISOString().split('T')[0];
+            }
+          }
         }
 
         console.log('Attempting signup with:', { 
@@ -316,7 +387,7 @@ const App = () => {
           // Check for date format errors (22008)
           if (insertError.code === '22008') {
             console.error('Date format error:', insertError);
-            return { success: false, error: 'Invalid birthdate format. Please enter birthdate in DD/MM/YYYY format (e.g., 20/07/1999).' };
+            return { success: false, error: 'Invalid birthdate format. Please select a valid date.' };
           }
           
           // Generic error with more details
@@ -342,7 +413,34 @@ const App = () => {
 
         // Store user using safe storage wrapper
         storage.set('karma-terra-user', JSON.stringify(userData));
+        storage.set('karma-terra-app-version', '3.11.0'); // Store current app version
         setUser(userData);
+
+        // Initialize push notifications and request permissions immediately for new users
+        // Use setTimeout to ensure state is updated first
+        setTimeout(async () => {
+          console.log('🔔 Initializing push notifications for new user:', userData.id)
+          initializePushNotifications(userData.id).catch((error) => {
+            console.error('❌ Failed to initialize push notifications:', error)
+          })
+          
+          // Request camera permissions proactively for new users (native platforms only)
+          if (Capacitor.isNativePlatform()) {
+            try {
+              console.log('📷 Requesting camera permissions for new user...')
+              const cameraPermission = await Camera.requestPermissions()
+              console.log('📷 Camera permission result:', cameraPermission)
+              if (cameraPermission.camera === 'granted') {
+                console.log('✅ Camera permission granted')
+              } else {
+                console.log('⚠️ Camera permission not granted:', cameraPermission.camera)
+              }
+            } catch (error) {
+              console.error('❌ Error requesting camera permissions:', error)
+              // Don't fail the login if camera permission request fails
+            }
+          }
+        }, 500)
 
         return { success: true };
       }
@@ -383,7 +481,17 @@ const App = () => {
 
       // Store user using safe storage wrapper
       storage.set('karma-terra-user', JSON.stringify(userData));
+      storage.set('karma-terra-app-version', '3.11.0'); // Store current app version
       setUser(userData);
+
+      // Initialize push notifications immediately for existing users
+      // Use setTimeout to ensure state is updated first
+      setTimeout(() => {
+        console.log('🔔 Initializing push notifications for user:', userData.id)
+        initializePushNotifications(userData.id).catch((error) => {
+          console.error('❌ Failed to initialize push notifications:', error)
+        })
+      }, 500)
 
       return { success: true };
     } catch (error) {
@@ -394,6 +502,7 @@ const App = () => {
 
   const signOut = async () => {
     storage.remove('karma-terra-user');
+    // Keep app version - it's used to detect fresh installs/updates
     setUser(null);
   };
 

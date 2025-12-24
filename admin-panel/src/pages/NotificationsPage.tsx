@@ -635,6 +635,7 @@ interface User {
   id: string
   phone_number: string
   full_name?: string
+  hasDeviceToken?: boolean
 }
 
 function NotificationForm({
@@ -680,7 +681,7 @@ function NotificationForm({
     }
   }, [showUserPicker])
 
-  // Fetch users for selection
+  // Fetch users for selection with device token status
   const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: ['users', userSearchTerm],
     queryFn: async () => {
@@ -694,9 +695,27 @@ function NotificationForm({
         query = query.or(`phone_number.ilike.%${userSearchTerm}%,full_name.ilike.%${userSearchTerm}%`)
       }
 
-      const { data, error } = await query
+      const { data: usersData, error } = await query
       if (error) throw error
-      return (data as User[]) || []
+      
+      // Check which users have device tokens
+      if (usersData && usersData.length > 0) {
+        const userIds = usersData.map(u => u.id)
+        const { data: tokens } = await supabase
+          .from('device_tokens')
+          .select('user_id')
+          .in('user_id', userIds)
+        
+        const usersWithTokens = new Set(tokens?.map(t => t.user_id) || [])
+        
+        // Add hasDeviceToken flag to each user
+        return (usersData as User[]).map(user => ({
+          ...user,
+          hasDeviceToken: usersWithTokens.has(user.id)
+        }))
+      }
+      
+      return (usersData as User[]) || []
     },
     enabled: formData.target_audience === 'specific',
   })
@@ -1070,9 +1089,20 @@ function NotificationForm({
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <div>
-                                  <div className="font-medium text-gray-900">
-                                    {user.full_name || 'No Name'}
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="font-medium text-gray-900">
+                                      {user.full_name || 'No Name'}
+                                    </div>
+                                    {user.hasDeviceToken ? (
+                                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700" title="Has device registered">
+                                        ✓ Device
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700" title="No device registered - user needs to log in and grant permissions">
+                                        ⚠ No Device
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-sm text-gray-500">{user.phone_number}</div>
                                 </div>
@@ -1095,6 +1125,35 @@ function NotificationForm({
                 <p className="text-sm text-orange-600 mt-1">
                   Please select at least one user to send this notification
                 </p>
+              )}
+              
+              {selectedUserIds.length > 0 && (
+                <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-800 font-medium mb-1">
+                    Selected Users Status:
+                  </p>
+                  <div className="text-xs text-blue-700">
+                    {(() => {
+                      const selectedUsers = users?.filter(u => selectedUserIds.includes(u.id)) || []
+                      const withDevices = selectedUsers.filter(u => u.hasDeviceToken).length
+                      const withoutDevices = selectedUsers.length - withDevices
+                      return (
+                        <>
+                          <span className="text-green-700 font-medium">{withDevices} with device(s)</span>
+                          {withoutDevices > 0 && (
+                            <>
+                              {' • '}
+                              <span className="text-orange-700 font-medium">{withoutDevices} without device(s)</span>
+                              <p className="mt-1 text-orange-600">
+                                Users without devices need to log into the app and grant notification permissions first.
+                              </p>
+                            </>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
               )}
             </div>
           )}

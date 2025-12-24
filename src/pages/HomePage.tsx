@@ -418,12 +418,12 @@ const HomePage = () => {
             {/* Product Image */}
             <button
               onClick={() => handleProductClick(products[currentProductIndex])}
-              className="w-full h-[400px] block"
+              className="w-full h-[250px] sm:h-[300px] md:h-[350px] lg:h-[400px] xl:h-[450px] block"
             >
               <img
                 src={products[currentProductIndex]?.image || "/app-icon.png"}
                 alt={products[currentProductIndex]?.name || "Product"}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-center"
                 loading="lazy"
                 decoding="async"
                 onError={(e) => {

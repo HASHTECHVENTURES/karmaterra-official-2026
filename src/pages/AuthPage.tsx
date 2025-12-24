@@ -293,12 +293,16 @@ const AuthPage = () => {
                 Birthdate *
               </label>
               <Input
-                type="text"
-                placeholder="DD/MM/YYYY"
+                type="date"
                 value={birthdate}
                 onChange={(e) => setBirthdate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg focus:border-green-500 focus:ring-green-500"
+                aria-label="Birthdate"
               />
+              <p className="text-xs text-gray-500 mt-2">
+                Select your date of birth (YYYY-MM-DD format)
+              </p>
             </div>
           )}
 

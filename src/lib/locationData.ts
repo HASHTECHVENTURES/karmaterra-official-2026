@@ -3,7 +3,14 @@ import { locationData, type Country, type State, type City } from './locationDat
 export type SimpleCountry = { name: string; code: string };
 
 export const getCountries = (): SimpleCountry[] => {
-	return locationData.countries.map((c: Country) => ({ name: c.name, code: c.code }));
+	const countries = locationData.countries.map((c: Country) => ({ name: c.name, code: c.code }));
+	// Move India to the first position
+	const indiaIndex = countries.findIndex(c => c.name === 'India');
+	if (indiaIndex > 0) {
+		const india = countries.splice(indiaIndex, 1)[0];
+		countries.unshift(india);
+	}
+	return countries;
 };
 
 export const getStatesByCountry = (countryName: string): string[] => {

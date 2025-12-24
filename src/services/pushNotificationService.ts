@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 
 // Track if we've already initialized to prevent duplicate initialization
 let isInitialized = false
+let currentUserId: string | undefined = undefined
 let registrationListener: any = null
 let registrationErrorListener: any = null
 
@@ -20,11 +21,28 @@ export async function initializePushNotifications(userId?: string): Promise<void
     return
   }
 
-  // Prevent duplicate initialization
-  if (isInitialized) {
-    console.log('⚠️ Push notifications already initialized, skipping...')
+  // Allow re-initialization if userId changes (e.g., new user login)
+  if (isInitialized && currentUserId === userId) {
+    console.log('⚠️ Push notifications already initialized for this user, skipping...')
     return
   }
+  
+  // If userId changed, reset initialization to allow re-initialization
+  if (isInitialized && currentUserId !== userId) {
+    console.log('🔄 User changed, re-initializing push notifications...')
+    isInitialized = false
+    // Clean up old listeners
+    if (registrationListener) {
+      await registrationListener.remove().catch(() => {})
+      registrationListener = null
+    }
+    if (registrationErrorListener) {
+      await registrationErrorListener.remove().catch(() => {})
+      registrationErrorListener = null
+    }
+  }
+  
+  currentUserId = userId
 
   try {
     // IMPORTANT: Set up listeners BEFORE registering!
@@ -35,9 +53,27 @@ export async function initializePushNotifications(userId?: string): Promise<void
       console.log('📱 Full token object:', JSON.stringify(token, null, 2))
       
       // Save token to database if user is logged in
-      if (userId) {
-        console.log('💾 Saving token for user:', userId)
-        await saveDeviceToken(userId, token.value)
+      // Use currentUserId in case userId changed during registration
+      const userIdToUse = currentUserId || userId
+      if (userIdToUse) {
+        console.log('💾 Saving token for user:', userIdToUse)
+        // Retry saving token up to 3 times with delays
+        let retries = 3
+        while (retries > 0) {
+          try {
+            await saveDeviceToken(userIdToUse, token.value)
+            console.log('✅ Device token saved successfully')
+            break
+          } catch (error) {
+            retries--
+            if (retries > 0) {
+              console.log(`⚠️ Failed to save token, retrying in 1 second... (${retries} retries left)`)
+              await new Promise(resolve => setTimeout(resolve, 1000))
+            } else {
+              console.error('❌ Failed to save device token after all retries:', error)
+            }
+          }
+        }
       } else {
         console.warn('⚠️ No userId provided, cannot save token')
       }
@@ -59,27 +95,76 @@ export async function initializePushNotifications(userId?: string): Promise<void
       console.log('👆 Push notification action performed:', action)
       const data = action.notification.data
       
-      if (data?.link) {
-        // Handle deep linking
-        const link = data.link
+      // Helper function to navigate safely with fallback to home
+      const navigateSafely = (route: string) => {
+        try {
+          // Validate route - must start with / for app routes
+          if (route && route.startsWith('/')) {
+            // Check if route exists in our app (basic validation)
+            const validRoutes = [
+              '/', '/profile', '/community', '/know-your-skin', '/skin-analysis-results',
+              '/progress-tracking', '/hair-analysis', '/hair-analysis-results', '/ask-karma',
+              '/ingredients', '/know-your-hair', '/market', '/blogs', '/blog',
+              '/terms', '/privacy', '/feedback', '/help'
+            ]
+            
+            // Check if route matches a valid route pattern
+            const isValidRoute = validRoutes.some(validRoute => {
+              if (validRoute === route) return true
+              // Handle dynamic routes like /blog/:id
+              if (validRoute.includes(':') && route.startsWith(validRoute.split(':')[0])) return true
+              return false
+            })
+            
+            if (isValidRoute) {
+              console.log('✅ Navigating to:', route)
+              window.location.href = route
+            } else {
+              console.warn('⚠️ Invalid route, redirecting to home:', route)
+              window.location.href = '/'
+            }
+          } else {
+            console.warn('⚠️ Invalid route format, redirecting to home:', route)
+            window.location.href = '/'
+          }
+        } catch (error) {
+          console.error('❌ Navigation error, redirecting to home:', error)
+          window.location.href = '/'
+        }
+      }
+      
+      // Handle navigation based on link
+      if (data?.link && data.link.trim()) {
+        const link = data.link.trim()
         
-        // If it's a full URL, open in browser
-        if (link.startsWith('http://') || link.startsWith('https://')) {
-          window.location.href = link
-        } 
-        // If it's an app route, navigate within app
-        else if (link.startsWith('/')) {
-          window.location.href = link
+        try {
+          // If it's a full URL, open in browser
+          if (link.startsWith('http://') || link.startsWith('https://')) {
+            console.log('🌐 Opening external URL:', link)
+            window.location.href = link
+          } 
+          // If it's an app route, navigate within app
+          else if (link.startsWith('/')) {
+            navigateSafely(link)
+          }
+          // Handle special deep link patterns
+          else if (link.startsWith('app://')) {
+            const route = link.replace('app://', '/')
+            navigateSafely(route)
+          }
+          // Default: try to navigate (treat as app route)
+          else {
+            const route = link.startsWith('/') ? link : `/${link}`
+            navigateSafely(route)
+          }
+        } catch (error) {
+          console.error('❌ Error navigating to link, redirecting to home:', error)
+          window.location.href = '/'
         }
-        // Handle special deep link patterns
-        else if (link.startsWith('app://')) {
-          const route = link.replace('app://', '/')
-          window.location.href = route
-        }
-        // Default: try to navigate
-        else {
-          window.location.href = link
-        }
+      } else {
+        // No link provided - redirect to home page
+        console.log('ℹ️ No link provided in notification, redirecting to home page')
+        window.location.href = '/'
       }
       
       // Mark notification as read if notification_id is provided
@@ -227,6 +312,7 @@ export async function removeDeviceToken(userId: string, token: string): Promise<
     console.error('❌ Error removing device token:', error)
   }
 }
+
 
 
 
