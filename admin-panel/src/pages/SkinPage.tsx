@@ -62,12 +62,31 @@ interface Product {
 
 // ==================== MAIN COMPONENT ====================
 
+interface RatingConfig {
+  low_min: number
+  low_max: number
+  medium_min: number
+  medium_max: number
+  high_min: number
+  high_max: number
+}
+
 export default function SkinPage() {
-  const [activeTab, setActiveTab] = useState<'questions' | 'parameters' | 'products' | 'reports'>('questions')
+  const [activeTab, setActiveTab] = useState<'questions' | 'parameters' | 'products' | 'reports' | 'rating-config'>('questions')
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const [showReportDetails, setShowReportDetails] = useState(false)
+  
+  // Rating configuration state
+  const [ratingConfig, setRatingConfig] = useState<RatingConfig>({
+    low_min: 1,
+    low_max: 3,
+    medium_min: 4,
+    medium_max: 7,
+    high_min: 8,
+    high_max: 10,
+  })
 
   // Questions state
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
@@ -158,6 +177,77 @@ export default function SkinPage() {
       }
     }
   }, [activeTab, parameters, selectedParameter])
+
+  // Fetch rating configuration
+  const { data: storedRatingConfig } = useQuery({
+    queryKey: ['skin-rating-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('skin_rating_config')
+        .maybeSingle()
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching rating config:', error)
+        return null
+      }
+      
+      if (data?.skin_rating_config) {
+        return data.skin_rating_config as RatingConfig
+      }
+      return null
+    },
+  })
+
+  useEffect(() => {
+    if (storedRatingConfig) {
+      setRatingConfig(storedRatingConfig)
+    }
+  }, [storedRatingConfig])
+
+  // Save rating configuration
+  const saveRatingConfigMutation = useMutation({
+    mutationFn: async (config: RatingConfig) => {
+      // Validate ranges
+      if (config.low_min < 1 || config.low_max > 10 || 
+          config.medium_min < 1 || config.medium_max > 10 ||
+          config.high_min < 1 || config.high_max > 10) {
+        throw new Error('All values must be between 1 and 10')
+      }
+      
+      if (config.low_max >= config.medium_min || config.medium_max >= config.high_min) {
+        throw new Error('Ranges must not overlap. Low max must be less than Medium min, and Medium max must be less than High min')
+      }
+
+      // Get existing config
+      const { data: existingConfig } = await supabase
+        .from('app_config')
+        .select('id, skin_rating_config')
+        .maybeSingle()
+
+      if (existingConfig?.id) {
+        const { error } = await supabase
+          .from('app_config')
+          .update({ skin_rating_config: config })
+          .eq('id', existingConfig.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('app_config')
+          .insert([{ skin_rating_config: config }])
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success('Rating configuration saved successfully')
+      queryClient.invalidateQueries({ queryKey: ['skin-rating-config'] })
+      // Also invalidate reports to refresh with new config
+      queryClient.invalidateQueries({ queryKey: ['skin-reports'] })
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to save rating configuration')
+    },
+  })
 
   // Fetch skin reports
   const { data: reports, isLoading: reportsLoading } = useQuery({
@@ -510,6 +600,17 @@ export default function SkinPage() {
               <Eye className="w-5 h-5 inline mr-2" />
               Reports
             </button>
+            <button
+              onClick={() => setActiveTab('rating-config')}
+              className={`px-6 py-4 text-sm font-medium border-b-2 ${
+                activeTab === 'rating-config'
+                  ? 'border-[#d4a574] text-[#d4a574]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <BarChart3 className="w-5 h-5 inline mr-2" />
+              Rating Config
+            </button>
           </nav>
         </div>
       </div>
@@ -738,10 +839,21 @@ export default function SkinPage() {
         />
       )}
 
+      {/* Rating Configuration Tab */}
+      {activeTab === 'rating-config' && (
+        <RatingConfigTab
+          ratingConfig={ratingConfig}
+          onConfigChange={setRatingConfig}
+          onSave={() => saveRatingConfigMutation.mutate(ratingConfig)}
+          isSaving={saveRatingConfigMutation.isPending}
+        />
+      )}
+
       {/* Report Details Modal */}
       {showReportDetails && selectedReport && (
         <SkinReportDetailsModal
           analysis={selectedReport}
+          ratingConfig={ratingConfig}
           onClose={() => {
             setShowReportDetails(false)
             setSelectedReport(null)
@@ -754,15 +866,37 @@ export default function SkinPage() {
 
 // ==================== REPORT MODAL ====================
 
+// Helper function to categorize rating using config
+const getRatingCategory = (rating: number, config: RatingConfig): { label: string; color: string; bgColor: string } => {
+  if (rating >= config.low_min && rating <= config.low_max) {
+    return { label: `Low (${config.low_min}-${config.low_max})`, color: 'text-green-700', bgColor: 'bg-green-100' }
+  } else if (rating >= config.medium_min && rating <= config.medium_max) {
+    return { label: `Medium (${config.medium_min}-${config.medium_max})`, color: 'text-yellow-700', bgColor: 'bg-yellow-100' }
+  } else if (rating >= config.high_min && rating <= config.high_max) {
+    return { label: `High (${config.high_min}-${config.high_max})`, color: 'text-red-700', bgColor: 'bg-red-100' }
+  }
+  return { label: 'N/A', color: 'text-gray-700', bgColor: 'bg-gray-100' }
+}
+
 function SkinReportDetailsModal({
   analysis,
+  ratingConfig,
   onClose,
 }: {
   analysis: any
+  ratingConfig: RatingConfig
   onClose: () => void
 }) {
   const report = analysis.analysis_result
   const severity = report?.result?.overallSeverity || 'N/A'
+  
+  // Calculate rating statistics using config
+  const parameters = report?.result?.parameters || []
+  const ratingStats = {
+    low: parameters.filter((p: any) => p.rating >= ratingConfig.low_min && p.rating <= ratingConfig.low_max).length,
+    medium: parameters.filter((p: any) => p.rating >= ratingConfig.medium_min && p.rating <= ratingConfig.medium_max).length,
+    high: parameters.filter((p: any) => p.rating >= ratingConfig.high_min && p.rating <= ratingConfig.high_max).length,
+  }
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -829,31 +963,62 @@ function SkinReportDetailsModal({
             </div>
           )}
 
+          {/* Rating Statistics Summary */}
+          {parameters.length > 0 && (
+            <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+                Rating Distribution
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white rounded-lg p-3 border border-green-200">
+                  <div className="text-2xl font-bold text-green-700">{ratingStats.low}</div>
+                  <div className="text-xs text-green-600 mt-1">Low ({ratingConfig.low_min}-{ratingConfig.low_max})</div>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-yellow-200">
+                  <div className="text-2xl font-bold text-yellow-700">{ratingStats.medium}</div>
+                  <div className="text-xs text-yellow-600 mt-1">Medium ({ratingConfig.medium_min}-{ratingConfig.medium_max})</div>
+                </div>
+                <div className="bg-white rounded-lg p-3 border border-red-200">
+                  <div className="text-2xl font-bold text-red-700">{ratingStats.high}</div>
+                  <div className="text-xs text-red-600 mt-1">High ({ratingConfig.high_min}-{ratingConfig.high_max})</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {report?.result?.parameters && report.result.parameters.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Parameters</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Parameters Analysis</h3>
               <div className="space-y-3">
-                {report.result.parameters.map((param: any, index: number) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900">{param.category}</h4>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        param.severity === 'Low' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
-                        param.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                        param.severity === 'High' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {param.severity}
-                      </span>
+                {report.result.parameters.map((param: any, index: number) => {
+                  const ratingCategory = param.rating ? getRatingCategory(param.rating, ratingConfig) : null
+                  return (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-gray-900">{param.category}</h4>
+                        <div className="flex items-center gap-2">
+                          {param.rating && ratingCategory && (
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${ratingCategory.bgColor} ${ratingCategory.color}`}>
+                              {param.rating}/10 - {ratingCategory.label}
+                            </span>
+                          )}
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            param.severity === 'Low' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
+                            param.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                            param.severity === 'High' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {param.severity}
+                          </span>
+                        </div>
+                      </div>
+                      {param.description && (
+                        <p className="text-sm text-gray-600">{param.description}</p>
+                      )}
                     </div>
-                    {param.description && (
-                      <p className="text-sm text-gray-600">{param.description}</p>
-                    )}
-                    {param.rating && (
-                      <p className="text-xs text-gray-500 mt-1">Rating: {param.rating}/10</p>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -3084,6 +3249,230 @@ function ProductForm({
     </div>
   )
 }
+
+// ==================== RATING CONFIG TAB ====================
+
+function RatingConfigTab({
+  ratingConfig,
+  onConfigChange,
+  onSave,
+  isSaving,
+}: {
+  ratingConfig: RatingConfig
+  onConfigChange: (config: RatingConfig) => void
+  onSave: () => void
+  isSaving: boolean
+}) {
+  return (
+    <div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Rating Range Configuration</h2>
+          <p className="text-sm text-gray-600">
+            Configure the rating ranges for categorizing skin analysis parameters. Ratings are on a scale of 1-10.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {/* Low Range */}
+          <div className="border border-green-200 rounded-lg p-4 bg-green-50">
+            <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-green-600"></div>
+              Low Range
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.low_min}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1
+                    if (value >= 1 && value <= 10 && value <= ratingConfig.low_max) {
+                      onConfigChange({ ...ratingConfig, low_min: value })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Maximum (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.low_max}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 3
+                    if (value >= 1 && value <= 10 && value >= ratingConfig.low_min && value < ratingConfig.medium_min) {
+                      onConfigChange({ ...ratingConfig, low_max: value })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-green-700 mt-2">
+              Current range: {ratingConfig.low_min} - {ratingConfig.low_max}
+            </p>
+          </div>
+
+          {/* Medium Range */}
+          <div className="border border-yellow-200 rounded-lg p-4 bg-yellow-50">
+            <h3 className="text-lg font-semibold text-yellow-800 mb-4 flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-yellow-600"></div>
+              Medium Range
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.medium_min}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 4
+                    if (value >= 1 && value <= 10 && value > ratingConfig.low_max && value <= ratingConfig.medium_max) {
+                      onConfigChange({ ...ratingConfig, medium_min: value })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Maximum (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.medium_max}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 7
+                    if (value >= 1 && value <= 10 && value >= ratingConfig.medium_min && value < ratingConfig.high_min) {
+                      onConfigChange({ ...ratingConfig, medium_max: value })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-yellow-700 mt-2">
+              Current range: {ratingConfig.medium_min} - {ratingConfig.medium_max}
+            </p>
+          </div>
+
+          {/* High Range */}
+          <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+            <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full bg-red-600"></div>
+              High Range
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.high_min}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 8
+                    if (value >= 1 && value <= 10 && value > ratingConfig.medium_max && value <= ratingConfig.high_max) {
+                      onConfigChange({ ...ratingConfig, high_min: value })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Maximum (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.high_max}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 10
+                    if (value >= 1 && value <= 10 && value >= ratingConfig.high_min) {
+                      onConfigChange({ ...ratingConfig, high_max: value })
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-red-700 mt-2">
+              Current range: {ratingConfig.high_min} - {ratingConfig.high_max}
+            </p>
+          </div>
+
+          {/* Validation Messages */}
+          {(ratingConfig.low_max >= ratingConfig.medium_min || 
+            ratingConfig.medium_max >= ratingConfig.high_min ||
+            ratingConfig.low_min < 1 || ratingConfig.high_max > 10) && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-800 font-medium mb-2">⚠️ Validation Errors:</p>
+              <ul className="text-xs text-red-700 list-disc list-inside space-y-1">
+                {ratingConfig.low_max >= ratingConfig.medium_min && (
+                  <li>Low maximum must be less than Medium minimum</li>
+                )}
+                {ratingConfig.medium_max >= ratingConfig.high_min && (
+                  <li>Medium maximum must be less than High minimum</li>
+                )}
+                {ratingConfig.low_min < 1 && (
+                  <li>Low minimum must be at least 1</li>
+                )}
+                {ratingConfig.high_max > 10 && (
+                  <li>High maximum cannot exceed 10</li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Preview */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Preview:</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-lg p-3 border border-green-200 text-center">
+                <div className="text-lg font-bold text-green-700">Low</div>
+                <div className="text-xs text-green-600 mt-1">{ratingConfig.low_min}-{ratingConfig.low_max}</div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-yellow-200 text-center">
+                <div className="text-lg font-bold text-yellow-700">Medium</div>
+                <div className="text-xs text-yellow-600 mt-1">{ratingConfig.medium_min}-{ratingConfig.medium_max}</div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-red-200 text-center">
+                <div className="text-lg font-bold text-red-700">High</div>
+                <div className="text-xs text-red-600 mt-1">{ratingConfig.high_min}-{ratingConfig.high_max}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <button
+              onClick={onSave}
+              disabled={
+                isSaving ||
+                ratingConfig.low_max >= ratingConfig.medium_min ||
+                ratingConfig.medium_max >= ratingConfig.high_min ||
+                ratingConfig.low_min < 1 ||
+                ratingConfig.high_max > 10
+              }
+              className="px-6 py-3 bg-[#d4a574] text-white rounded-lg hover:bg-[#d4a574]/90 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {isSaving ? 'Saving...' : 'Save Configuration'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 
 

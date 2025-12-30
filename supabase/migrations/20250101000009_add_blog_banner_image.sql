@@ -13,3 +13,5 @@ COMMENT ON COLUMN app_config.blog_banner_image IS 'URL of the banner image displ
 
 
 
+
+

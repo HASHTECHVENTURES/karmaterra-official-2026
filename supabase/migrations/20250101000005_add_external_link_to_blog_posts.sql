@@ -13,3 +13,5 @@ COMMENT ON COLUMN blog_posts.external_link IS 'External URL where users will be 
 
 
 
+
+

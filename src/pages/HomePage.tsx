@@ -294,11 +294,60 @@ const HomePage = () => {
     }
   };
 
+  // State for service icons with fallback to Lucide icons
+  const [serviceIcons, setServiceIcons] = useState<Record<string, string>>({});
+  const [iconErrors, setIconErrors] = useState<Record<string, boolean>>({});
+
+  // Fetch service icons from app_images table
+  useEffect(() => {
+    const fetchServiceIcons = async () => {
+      try {
+        const icons: Record<string, string> = {};
+        
+        // Try to fetch icons by name
+        const skinIcon = await getAppImageByName('know-your-skin-icon');
+        const hairIcon = await getAppImageByName('know-your-hair-icon');
+        const communityIcon = await getAppImageByName('community-icon');
+        
+        if (skinIcon) icons.skin = skinIcon.image_url;
+        if (hairIcon) icons.hair = hairIcon.image_url;
+        if (communityIcon) icons.community = communityIcon.image_url;
+        
+        // If not found in database, use public URLs based on known file paths
+        if (!icons.skin) {
+          icons.skin = 'https://aagehceioskhyxvtolfz.supabase.co/storage/v1/object/public/karmaterra%20images/ec8d32dd-cf00-4a0d-93bd-64307bab4bef-removebg-preview.png';
+        }
+        if (!icons.hair) {
+          icons.hair = 'https://aagehceioskhyxvtolfz.supabase.co/storage/v1/object/public/karmaterra%20images/1dec4eca-3cf7-4ae8-92e6-baf368a43342-removebg-preview.png';
+        }
+        if (!icons.community) {
+          icons.community = 'https://aagehceioskhyxvtolfz.supabase.co/storage/v1/object/public/karmaterra%20images/1538a485-a313-4adb-9e57-a0a25659c63c-removebg-preview.png';
+        }
+        
+        setServiceIcons(icons);
+      } catch (error) {
+        console.error('Error fetching service icons:', error);
+      }
+    };
+    
+    fetchServiceIcons();
+  }, []);
+
   // Memoize services array to prevent recreation on every render
   const services = useMemo(() => [
     {
       title: "Know Your Skin",
-      icon: <img src="https://aagehceioskhyxvtolfz.supabase.co/storage/v1/object/sign/karmaterra%20images/ec8d32dd-cf00-4a0d-93bd-64307bab4bef-removebg-preview.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNmYwODA2Zi1lZjNiLTRjNjUtODc5ZC1kNzMyOWM4MmM2Y2YiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJrYXJtYXRlcnJhIGltYWdlcy9lYzhkMzJkZC1jZjAwLTRhMGQtOTNiZC02NDMwN2JhYjRiZWYtcmVtb3ZlYmctcHJldmlldy5wbmciLCJpYXQiOjE3NjE4MTc5NDMsImV4cCI6NjYyNTI5Mzc5NDN9.-tl5ce8D_UakU395AaLe0omfi5oXOZQkk3lKIcuFH5A" alt="Know Your Skin" className="w-8 h-8 object-contain filter invert brightness-150" loading="lazy" />,
+      icon: !iconErrors.skin && serviceIcons.skin ? (
+        <img 
+          src={serviceIcons.skin} 
+          alt="Know Your Skin" 
+          className="w-8 h-8 object-contain filter invert brightness-150" 
+          loading="lazy"
+          onError={() => setIconErrors(prev => ({ ...prev, skin: true }))}
+        />
+      ) : (
+        <Scissors className="w-6 h-6" />
+      ),
       bgColor: "bg-gradient-to-br from-orange-100 to-orange-200",
       iconBg: "bg-orange-500",
       textColor: "text-orange-700",
@@ -306,7 +355,17 @@ const HomePage = () => {
     },
     {
       title: "Know Your Hair",
-      icon: <img src="https://aagehceioskhyxvtolfz.supabase.co/storage/v1/object/sign/karmaterra%20images/1dec4eca-3cf7-4ae8-92e6-baf368a43342-removebg-preview.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNmYwODA2Zi1lZjNiLTRjNjUtODc5ZC1kNzMyOWM4MmM2Y2YiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJrYXJtYXRlcnJhIGltYWdlcy8xZGVjNGVjYS0zY2Y3LTRhZTgtOTJlNi1iYWYzNjhhNDMzNDItcmVtb3ZlYmctcHJldmlldy5wbmciLCJpYXQiOjE3NjE4MTgxMjUsImV4cCI6NjY0MTA2MTgxMjV9.1TWqdqbHTJSOkyIw8EMQLpn2EPgYvXwSzHRP7odhTEw" alt="Know Your Hair" className="w-8 h-8 object-contain filter invert brightness-150" loading="lazy" />,
+      icon: !iconErrors.hair && serviceIcons.hair ? (
+        <img 
+          src={serviceIcons.hair} 
+          alt="Know Your Hair" 
+          className="w-8 h-8 object-contain filter invert brightness-150" 
+          loading="lazy"
+          onError={() => setIconErrors(prev => ({ ...prev, hair: true }))}
+        />
+      ) : (
+        <Scissors className="w-6 h-6" />
+      ),
       bgColor: "bg-gradient-to-br from-indigo-100 to-indigo-200",
       iconBg: "bg-indigo-500",
       textColor: "text-indigo-700",
@@ -322,13 +381,23 @@ const HomePage = () => {
     },
     {
       title: "Community",
-      icon: <img src="https://aagehceioskhyxvtolfz.supabase.co/storage/v1/object/sign/karmaterra%20images/1538a485-a313-4adb-9e57-a0a25659c63c-removebg-preview.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9kNmYwODA2Zi1lZjNiLTRjNjUtODc5ZC1kNzMyOWM4MmM2Y2YiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJrYXJtYXRlcnJhIGltYWdlcy8xNTM4YTQ4NS1hMzEzLTRhZGItOWU1Ny1hMGEyNTY1OWM2M2MtcmVtb3ZlYmctcHJldmlldy5wbmciLCJpYXQiOjE3NjE4MTgyNzksImV4cCI6NjYwOTUyNTgyNzl9.RDscj4vxpoPKgeidh7Edefftv7Bib4ptdGbAfY_zubs" alt="Community" className="w-8 h-8 object-contain filter invert brightness-150" loading="lazy" />,
+      icon: !iconErrors.community && serviceIcons.community ? (
+        <img 
+          src={serviceIcons.community} 
+          alt="Community" 
+          className="w-8 h-8 object-contain filter invert brightness-150" 
+          loading="lazy"
+          onError={() => setIconErrors(prev => ({ ...prev, community: true }))}
+        />
+      ) : (
+        <Users className="w-6 h-6" />
+      ),
       bgColor: "bg-gradient-to-br from-teal-100 to-teal-200",
       iconBg: "bg-teal-500",
       textColor: "text-teal-700",
       onClick: () => navigate("/community")
     }
-  ], [navigate]);
+  ], [navigate, serviceIcons, iconErrors]);
 
   if (selectedProduct) {
     return (

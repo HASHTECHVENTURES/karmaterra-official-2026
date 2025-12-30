@@ -23,3 +23,5 @@ COMMENT ON COLUMN notifications.template_name IS 'Name of the template used to c
 
 
 
+
+
