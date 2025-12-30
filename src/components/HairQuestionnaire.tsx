@@ -225,16 +225,26 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
   // Only initialize from existingAnswers on mount, don't reset user's current selections
   useEffect(() => {
     if (existingAnswers && Object.keys(existingAnswers).length > 0) {
+      console.log('📋 HairQuestionnaire: Loading existing answers:', existingAnswers);
+      console.log('📋 HairQuestionnaire: existingAnswers keys:', Object.keys(existingAnswers));
+      
       // Only set if answers state is still empty (initial load)
       // Don't overwrite if user has already made selections
       setAnswers(prev => {
         if (Object.keys(prev).length === 0) {
-          return existingAnswers;
+          console.log('📋 HairQuestionnaire: Setting initial answers from existingAnswers');
+          // Deep clone to ensure React detects the change
+          const clonedAnswers = JSON.parse(JSON.stringify(existingAnswers));
+          console.log('📋 HairQuestionnaire: Cloned answers:', clonedAnswers);
+          return clonedAnswers;
         }
+        console.log('📋 HairQuestionnaire: Keeping user selections, not overwriting');
         return prev; // Keep user's selections
       });
+    } else {
+      console.log('📋 HairQuestionnaire: No existing answers, starting fresh');
     }
-  }, []); // Only run once on mount
+  }, [existingAnswers]); // Include existingAnswers in dependencies
 
   // Memoize missing data check to prevent recalculation on every render
   const missingData = useMemo(() => ({
@@ -271,10 +281,19 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
         
         // Try to map to existing field name, or create a unique ID
         const questionTextLower = q.question_text.toLowerCase().trim();
-        const questionId = questionToFieldMap[questionTextLower] || 
+        // Remove question mark and normalize
+        const normalizedText = questionTextLower.replace(/\?/g, '').trim();
+        // Check mapping first (this ensures we use the correct field name like 'hairType')
+        const mappedField = questionToFieldMap[normalizedText] || questionToFieldMap[questionTextLower];
+        const questionId = mappedField || 
           q.question_text.toLowerCase()
             .replace(/[^a-z0-9]+/g, '_')
             .replace(/^_+|_+$/g, '');
+        
+        // Log mapping for debugging
+        if (mappedField) {
+          console.log(`📋 HairQuestionnaire: Mapped "${q.question_text}" to field "${mappedField}"`);
+        }
         
         return {
           id: questionId,
@@ -312,23 +331,46 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
     return questions;
   }, [dbQuestions, hasMissingData, missingData]);
 
+  const currentQuestion = allQuestions[currentStep];
+
   // Debug: Log current answer when question changes
   useEffect(() => {
-    if (allQuestions.length > 0 && currentStep < allQuestions.length) {
-      const currentQuestion = allQuestions[currentStep];
-      const currentAnswer = answers[currentQuestion.id as keyof HairQuestionnaireAnswers];
-      console.log(`🔍 Question ${currentStep + 1} (${currentQuestion.id}): Current answer =`, currentAnswer);
+    if (currentQuestion) {
+      // Try to get answer by question ID first, then by mapped field name
+      const questionId = currentQuestion.id;
+      const questionTextLower = currentQuestion.title.toLowerCase().trim();
+      const normalizedText = questionTextLower.replace(/\?/g, '').trim();
+      const mappedField = questionToFieldMap[normalizedText] || questionToFieldMap[questionTextLower];
+      
+      // Try multiple ways to get the answer
+      let currentAnswer = answers[questionId as keyof HairQuestionnaireAnswers];
+      if (!currentAnswer && mappedField) {
+        currentAnswer = answers[mappedField];
+        console.log(`📋 HairQuestionnaire: Found answer via mapped field "${mappedField}" for question "${questionId}"`);
+      }
+      
+      console.log(`🔍 Question ${currentStep + 1} (${questionId}): Current answer =`, currentAnswer);
+      console.log(`🔍 Mapped field for this question:`, mappedField);
       console.log('📝 All answers so far:', answers);
+      console.log('📝 existingAnswers prop:', existingAnswers);
     }
-  }, [currentStep, allQuestions, answers]);
+  }, [currentStep, allQuestions, answers, currentQuestion, existingAnswers]);
 
   const handleAnswer = (answer: string) => {
+    if (!currentQuestion) return;
+    
+    // Get the mapped field name for this question
+    const questionTextLower = currentQuestion.title.toLowerCase().trim();
+    const normalizedText = questionTextLower.replace(/\?/g, '').trim();
+    const mappedField = questionToFieldMap[normalizedText] || questionToFieldMap[questionTextLower];
+    const fieldToUse = mappedField || currentQuestion.id;
+    
     setAnswers(prev => {
       const updated = {
         ...prev,
-        [currentQuestion.id]: answer
+        [fieldToUse]: answer
       };
-      console.log(`✅ Answer selected for ${currentQuestion.id}:`, answer);
+      console.log(`✅ Answer selected for ${currentQuestion.id} (using field: ${fieldToUse}):`, answer);
       console.log('📝 Updated answers:', updated);
       return updated;
     });
@@ -399,8 +441,6 @@ const HairQuestionnaire = ({ onComplete, onBack, userProfile, existingAnswers }:
       </div>
     );
   }
-
-  const currentQuestion = allQuestions[currentStep];
 
   return (
     <div className="bg-gradient-to-br from-karma-cream via-background to-karma-light-gold p-6 rounded-2xl">

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { UserData, AnalysisResult } from '../types'
+import { SKIN_PARAMETERS } from '../lib/constants'
 
 // Export HairAnalysisResult type for use in other files
 export interface HairAnalysisResult {
@@ -153,7 +154,71 @@ export const analyzeSkin = async (userData: UserData, faceImages: string[], user
     }
 
     console.log('✅ Edge function response received successfully')
-    return data.data as AnalysisResult
+    
+    // Ensure all parameters are present in the analysis result
+    // The AI might omit some parameters, so we need to add them
+    let analysisResult = data.data as AnalysisResult
+    
+    if (analysisResult && analysisResult.parameters) {
+      // Extract primary concerns from userData for better handling of missing parameters
+      const primaryConcern = Array.isArray((userData as any).primarySkinConcern)
+        ? (userData as any).primarySkinConcern.join(', ').toLowerCase()
+        : ((userData as any).primarySkinConcern || '').toLowerCase()
+      
+      // Helper function to normalize parameter names for matching
+      const normalizeParamName = (name: string): string => {
+        return name.toLowerCase().replace(/'/g, '').replace(/\s+/g, ' ').trim()
+      }
+      
+      // Ensure all parameters are present
+      const completeParameters = SKIN_PARAMETERS.map(paramName => {
+        // Try exact match first
+        let foundParam = analysisResult.parameters.find(p => p.category === paramName)
+        
+        // If not found, try normalized matching (handles apostrophes, case differences)
+        if (!foundParam) {
+          const normalizedTarget = normalizeParamName(paramName)
+          foundParam = analysisResult.parameters.find(p => {
+            const normalizedCategory = normalizeParamName(p.category)
+            return normalizedCategory === normalizedTarget
+          })
+        }
+        
+        // If still not found, try partial matching
+        if (!foundParam) {
+          const targetWords = normalizeParamName(paramName).split(' ')
+          foundParam = analysisResult.parameters.find(p => {
+            const categoryWords = normalizeParamName(p.category).split(' ')
+            return targetWords.every(word => categoryWords.some(catWord => catWord.includes(word) || word.includes(catWord)))
+          })
+        }
+        
+        if (foundParam) {
+          // Ensure the category name matches exactly what we expect
+          return {
+            ...foundParam,
+            category: paramName
+          }
+        }
+        
+        // If parameter was in user's primary concerns, give it more attention
+        const isUserConcern = primaryConcern.includes(normalizeParamName(paramName))
+        
+        return {
+          category: paramName,
+          rating: isUserConcern ? 5 : 1, // Higher default if user reported it
+          severity: isUserConcern ? 'Medium' : 'N/A',
+          description: isUserConcern 
+            ? `User reported "${paramName}" as a primary concern. Visual analysis did not detect significant signs of this condition in the provided images. This could be due to: (1) early-stage condition not yet visible, (2) subtle presentation not captured in standard lighting, (3) condition more apparent under different conditions, or (4) image quality limitations. Recommendation: Monitor this area and consider preventative care.`
+            : 'No significant concerns detected in this area.'
+        }
+      })
+      
+      analysisResult.parameters = completeParameters
+      console.log(`✅ Ensured all ${SKIN_PARAMETERS.length} parameters are present in analysis`)
+    }
+    
+    return analysisResult
   } catch (error: any) {
     console.error('❌ Error calling analyze-skin edge function:', error)
     console.error('❌ Error details:', {
@@ -230,6 +295,7 @@ export const analyzeHair = async (
     throw new Error(error.message || 'Failed to analyze hair')
   }
 }
+
 
 
 

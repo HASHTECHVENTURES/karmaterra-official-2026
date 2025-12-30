@@ -5,7 +5,8 @@ export const SKIN_PARAMETERS = [
   'Ageing',
   'Dark Spots',
   'Under Eye',
-  'Lines & Wrinkles',
+  "Crow's Feet",
   'Tan',
-  'Pigmentation'
+  'Pigmentation',
+  'Sebum'
 ];

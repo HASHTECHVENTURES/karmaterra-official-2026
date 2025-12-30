@@ -74,9 +74,24 @@ const HairAnalysisPage = () => {
               console.error('Error loading questionnaire history:', questionnaireError);
             }
 
-            if (latestQuestionnaire?.questionnaire_data) {
+            let questionnaireData = latestQuestionnaire?.questionnaire_data || null;
+            
+            // Parse questionnaire_data if it's a string
+            if (typeof questionnaireData === 'string') {
+              try {
+                questionnaireData = JSON.parse(questionnaireData);
+                console.log('📋 HairAnalysisPage: Parsed questionnaire_data from string:', questionnaireData);
+              } catch (e) {
+                console.error('📋 HairAnalysisPage: Error parsing questionnaire_data:', e);
+              }
+            }
+
+            if (questionnaireData && typeof questionnaireData === 'object') {
               // Merge with profile data, but questionnaire_history takes precedence if it has more complete data
-              const qData = latestQuestionnaire.questionnaire_data as Partial<HairQuestionnaireAnswers>;
+              const qData = questionnaireData as Partial<HairQuestionnaireAnswers>;
+              console.log('📋 HairAnalysisPage: Using questionnaire_data directly:', qData);
+              console.log('📋 HairAnalysisPage: questionnaire_data keys:', Object.keys(qData));
+              
               Object.keys(qData).forEach(key => {
                 const typedKey = key as keyof HairQuestionnaireAnswers;
                 const value = qData[typedKey];
@@ -84,6 +99,8 @@ const HairAnalysisPage = () => {
                   (existingAnswers as any)[typedKey] = value;
                 }
               });
+              
+              console.log('📋 HairAnalysisPage: Merged existingAnswers after questionnaire_data:', existingAnswers);
             }
 
             // Only set if we have at least one answer for THIS user

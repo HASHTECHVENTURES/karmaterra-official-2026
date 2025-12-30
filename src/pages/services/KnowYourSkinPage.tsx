@@ -68,9 +68,54 @@ const KnowYourSkinPage = () => {
         // Prioritize questionnaire_history data over profile data, but fall back to profile
         const questionnaireData = latestQuestionnaire?.questionnaire_data || null;
         
+        console.log('📋 KnowYourSkinPage: ========== DATA LOADING DEBUG ==========');
+        console.log('📋 KnowYourSkinPage: Raw latestQuestionnaire:', latestQuestionnaire);
+        console.log('📋 KnowYourSkinPage: Raw questionnaire_data from history:', questionnaireData);
+        console.log('📋 KnowYourSkinPage: Type of questionnaire_data:', typeof questionnaireData);
+        console.log('📋 KnowYourSkinPage: Loaded dbProfile:', dbProfile);
+        console.log('📋 KnowYourSkinPage: primary_skin_concern from profile:', dbProfile?.primary_skin_concern);
+        console.log('📋 KnowYourSkinPage: primary_skin_concern type:', typeof dbProfile?.primary_skin_concern);
+        console.log('📋 KnowYourSkinPage: primary_skin_concern is array:', Array.isArray(dbProfile?.primary_skin_concern));
+        if (questionnaireData) {
+          console.log('📋 KnowYourSkinPage: primarySkinConcern from questionnaire_data:', questionnaireData.primarySkinConcern);
+          console.log('📋 KnowYourSkinPage: primarySkinConcern type:', typeof questionnaireData.primarySkinConcern);
+          console.log('📋 KnowYourSkinPage: primarySkinConcern is array:', Array.isArray(questionnaireData.primarySkinConcern));
+          console.log('📋 KnowYourSkinPage: Full questionnaire_data keys:', Object.keys(questionnaireData));
+          console.log('📋 KnowYourSkinPage: Full questionnaire_data:', JSON.stringify(questionnaireData, null, 2));
+        } else {
+          console.log('⚠️ KnowYourSkinPage: questionnaire_data is null or undefined');
+        }
+        console.log('📋 KnowYourSkinPage: Full dbProfile keys with skin fields:', dbProfile ? Object.keys(dbProfile).filter(k => k.includes('skin') || k.includes('Skin') || k.includes('concern')) : 'null');
+        console.log('📋 KnowYourSkinPage: ===========================================');
+        
+        // Check if questionnaire_data is a string that needs parsing
+        let parsedQuestionnaireData = questionnaireData;
+        if (typeof questionnaireData === 'string') {
+          try {
+            parsedQuestionnaireData = JSON.parse(questionnaireData);
+            console.log('📋 KnowYourSkinPage: Parsed questionnaire_data from string:', parsedQuestionnaireData);
+          } catch (e) {
+            console.error('📋 KnowYourSkinPage: Error parsing questionnaire_data:', e);
+          }
+        }
+        
+        // Use parsed data if available
+        let dataToUse = parsedQuestionnaireData || questionnaireData;
+        
+        // If dataToUse is still a string, try parsing again
+        if (typeof dataToUse === 'string') {
+          try {
+            dataToUse = JSON.parse(dataToUse);
+            console.log('📋 KnowYourSkinPage: Second parse of questionnaire_data:', dataToUse);
+          } catch (e) {
+            console.error('📋 KnowYourSkinPage: Error in second parse:', e);
+            dataToUse = null;
+          }
+        }
+        
         // Only set questionnaire answers if we have ACTUAL questionnaire data for THIS specific user
         // Don't create defaults just because a profile exists - new users should start blank
-        const hasActualQuestionnaireData = questionnaireData || 
+        const hasActualQuestionnaireData = dataToUse || 
           (dbProfile && (
             dbProfile.primary_skin_concern || 
             dbProfile.skin_type || 
@@ -89,89 +134,178 @@ const KnowYourSkinPage = () => {
           ));
         
         if (hasActualQuestionnaireData) {
-          // Build previousAnswers only from actual data - NO defaults for display
-          // Defaults will only be applied when completing the questionnaire if user doesn't answer
-          const previousAnswers: Partial<QuestionnaireAnswers> = {};
+          // If we have questionnaire_data, use it directly (it should have all fields)
+          // Otherwise, build from profile fields
+          let previousAnswers: Partial<QuestionnaireAnswers> = {};
           
-          // Only add fields that actually exist in the data
-          if (questionnaireData?.primarySkinConcern || dbProfile?.primary_skin_concern) {
-            previousAnswers.primarySkinConcern = questionnaireData?.primarySkinConcern
-              ? (Array.isArray(questionnaireData.primarySkinConcern)
-                  ? questionnaireData.primarySkinConcern
-                  : [questionnaireData.primarySkinConcern])
-              : Array.isArray(dbProfile?.primary_skin_concern)
-                ? dbProfile.primary_skin_concern
-                : dbProfile?.primary_skin_concern
-                  ? [dbProfile.primary_skin_concern]
-                  : ['Aging'];
-          }
-          
-          if (questionnaireData?.skinType || dbProfile?.skin_type) {
-            previousAnswers.skinType = questionnaireData?.skinType || dbProfile?.skin_type;
-          }
-          if (questionnaireData?.skinTone || dbProfile?.skin_tone) {
-            previousAnswers.skinTone = questionnaireData?.skinTone || dbProfile?.skin_tone;
-          }
-          if (questionnaireData?.glow || dbProfile?.glow) {
-            previousAnswers.glow = questionnaireData?.glow || dbProfile?.glow;
-          }
-          if (questionnaireData?.middaySkinFeel || dbProfile?.midday_skin_feel) {
-            previousAnswers.middaySkinFeel = questionnaireData?.middaySkinFeel || dbProfile?.midday_skin_feel;
-          }
-          if (questionnaireData?.sunscreenUsage || dbProfile?.sunscreen_usage) {
-            previousAnswers.sunscreenUsage = questionnaireData?.sunscreenUsage || dbProfile?.sunscreen_usage;
-          }
-          if (questionnaireData?.physicalActivity || dbProfile?.physical_activity) {
-            previousAnswers.physicalActivity = questionnaireData?.physicalActivity || dbProfile?.physical_activity;
-          }
-          if (questionnaireData?.sleepingHabits || dbProfile?.sleeping_habits) {
-            previousAnswers.sleepingHabits = questionnaireData?.sleepingHabits || dbProfile?.sleeping_habits;
-          }
-          if (questionnaireData?.skinTreatment || dbProfile?.skin_treatment) {
-            previousAnswers.skinTreatment = questionnaireData?.skinTreatment || dbProfile?.skin_treatment;
-          }
-          
-          // Legacy fields (optional)
-          if (questionnaireData?.profession || dbProfile?.profession) {
-            previousAnswers.profession = questionnaireData?.profession || dbProfile?.profession;
-          }
-          if (questionnaireData?.workingHours || dbProfile?.workingTime) {
-            previousAnswers.workingHours = questionnaireData?.workingHours || dbProfile?.workingTime;
-          }
-          if (questionnaireData?.workStress || dbProfile?.workStress) {
-            previousAnswers.workStress = questionnaireData?.workStress || dbProfile?.workStress;
-          }
-          if (questionnaireData?.smoking || dbProfile?.smoking) {
-            previousAnswers.smoking = questionnaireData?.smoking || dbProfile?.smoking;
-          }
-          if (questionnaireData?.waterQuality || dbProfile?.water_quality) {
-            previousAnswers.waterQuality = questionnaireData?.waterQuality || dbProfile?.water_quality;
-          }
-          if (questionnaireData?.acUsage || dbProfile?.ac_usage) {
-            previousAnswers.acUsage = questionnaireData?.acUsage || dbProfile?.ac_usage;
-          }
-          
-          // Demographic fields
-          if (questionnaireData?.gender || dbProfile?.gender) {
-            previousAnswers.gender = questionnaireData?.gender || dbProfile?.gender;
-          }
-          if (questionnaireData?.birthdate || dbProfile?.birthdate || dbProfile?.date_of_birth) {
-            previousAnswers.birthdate = questionnaireData?.birthdate || dbProfile?.birthdate || dbProfile?.date_of_birth;
-          }
-          if (questionnaireData?.city || dbProfile?.city) {
-            previousAnswers.city = questionnaireData?.city || dbProfile?.city;
-          }
-          if (questionnaireData?.state || dbProfile?.state) {
-            previousAnswers.state = questionnaireData?.state || dbProfile?.state;
+          if (dataToUse && typeof dataToUse === 'object' && Object.keys(dataToUse).length > 0) {
+            // Use questionnaire_data directly - it should have all the fields
+            console.log('📋 KnowYourSkinPage: Using questionnaire_data directly:', dataToUse);
+            console.log('📋 KnowYourSkinPage: dataToUse keys:', Object.keys(dataToUse));
+            console.log('📋 KnowYourSkinPage: dataToUse.primarySkinConcern:', dataToUse.primarySkinConcern);
+            console.log('📋 KnowYourSkinPage: dataToUse.primarySkinConcern type:', typeof dataToUse.primarySkinConcern);
+            console.log('📋 KnowYourSkinPage: dataToUse.primarySkinConcern is array:', Array.isArray(dataToUse.primarySkinConcern));
+            
+            // Deep clone the data to avoid reference issues - include ALL fields from dataToUse
+            previousAnswers = JSON.parse(JSON.stringify(dataToUse)) as Partial<QuestionnaireAnswers>;
+            
+            // Helper function to normalize primarySkinConcern to array
+            const normalizePrimarySkinConcern = (value: any): string[] | undefined => {
+              if (value === undefined || value === null) return undefined;
+              if (Array.isArray(value)) {
+                // Filter out any null/undefined values
+                return value.filter(v => v !== null && v !== undefined && v !== '');
+              }
+              if (typeof value === 'string') {
+                // Try to parse if it's a JSON string
+                try {
+                  const parsed = JSON.parse(value);
+                  if (Array.isArray(parsed)) {
+                    return parsed.filter(v => v !== null && v !== undefined && v !== '');
+                  }
+                  return [parsed].filter(v => v !== null && v !== undefined && v !== '');
+                } catch {
+                  // If parsing fails, treat as single string value
+                  return value.trim() ? [value] : undefined;
+                }
+              }
+              // Convert single value to array
+              return [String(value)].filter(v => v !== null && v !== undefined && v !== '');
+            };
+            
+            // Ensure primarySkinConcern is an array - check multiple sources
+            let primaryConcern = normalizePrimarySkinConcern(dataToUse.primarySkinConcern);
+            
+            // If not found in dataToUse, try profile as fallback
+            if (!primaryConcern && dbProfile?.primary_skin_concern) {
+              console.log('📋 KnowYourSkinPage: primarySkinConcern not in dataToUse, trying profile:', dbProfile.primary_skin_concern);
+              primaryConcern = normalizePrimarySkinConcern(dbProfile.primary_skin_concern);
+            }
+            
+            // Set primarySkinConcern if we found it
+            if (primaryConcern && primaryConcern.length > 0) {
+              previousAnswers.primarySkinConcern = primaryConcern;
+              console.log('✅ KnowYourSkinPage: Set primarySkinConcern:', previousAnswers.primarySkinConcern);
+            } else {
+              console.log('⚠️ KnowYourSkinPage: primarySkinConcern not found in any source');
+            }
+          } else {
+            // Fallback: Build from profile fields if questionnaire_data is not available
+            console.log('📋 KnowYourSkinPage: Building answers from profile fields');
+            
+            // Only add fields that actually exist in the data
+            // Check questionnaire_data first (most recent), then fall back to profile
+            // Helper function to normalize primarySkinConcern to array
+            const normalizePrimarySkinConcern = (value: any): string[] | undefined => {
+              if (value === undefined || value === null) return undefined;
+              if (Array.isArray(value)) {
+                return value.filter(v => v !== null && v !== undefined && v !== '');
+              }
+              if (typeof value === 'string') {
+                try {
+                  const parsed = JSON.parse(value);
+                  if (Array.isArray(parsed)) {
+                    return parsed.filter(v => v !== null && v !== undefined && v !== '');
+                  }
+                  return [parsed].filter(v => v !== null && v !== undefined && v !== '');
+                } catch {
+                  return value.trim() ? [value] : undefined;
+                }
+              }
+              return [String(value)].filter(v => v !== null && v !== undefined && v !== '');
+            };
+            
+            const primaryConcern = normalizePrimarySkinConcern(dataToUse?.primarySkinConcern) || 
+                                   normalizePrimarySkinConcern(dbProfile?.primary_skin_concern);
+            if (primaryConcern && primaryConcern.length > 0) {
+              previousAnswers.primarySkinConcern = primaryConcern;
+              console.log('✅ KnowYourSkinPage: Set primarySkinConcern from fallback:', previousAnswers.primarySkinConcern);
+            } else {
+              console.log('⚠️ KnowYourSkinPage: No primarySkinConcern found in questionnaire_data or profile');
+            }
+            
+            if (dataToUse?.skinType || dbProfile?.skin_type) {
+              previousAnswers.skinType = dataToUse?.skinType || dbProfile?.skin_type;
+            }
+            if (dataToUse?.skinTone || dbProfile?.skin_tone) {
+              previousAnswers.skinTone = dataToUse?.skinTone || dbProfile?.skin_tone;
+            }
+            if (dataToUse?.glow || dbProfile?.glow) {
+              previousAnswers.glow = dataToUse?.glow || dbProfile?.glow;
+            }
+            if (dataToUse?.middaySkinFeel || dbProfile?.midday_skin_feel) {
+              previousAnswers.middaySkinFeel = dataToUse?.middaySkinFeel || dbProfile?.midday_skin_feel;
+            }
+            if (dataToUse?.sunscreenUsage || dbProfile?.sunscreen_usage) {
+              previousAnswers.sunscreenUsage = dataToUse?.sunscreenUsage || dbProfile?.sunscreen_usage;
+            }
+            if (dataToUse?.physicalActivity || dbProfile?.physical_activity) {
+              previousAnswers.physicalActivity = dataToUse?.physicalActivity || dbProfile?.physical_activity;
+            }
+            if (dataToUse?.sleepingHabits || dbProfile?.sleeping_habits) {
+              previousAnswers.sleepingHabits = dataToUse?.sleepingHabits || dbProfile?.sleeping_habits;
+            }
+            if (dataToUse?.skinTreatment || dbProfile?.skin_treatment) {
+              previousAnswers.skinTreatment = dataToUse?.skinTreatment || dbProfile?.skin_treatment;
+            }
+            
+            // Legacy fields (optional)
+            if (dataToUse?.profession || dbProfile?.profession) {
+              previousAnswers.profession = dataToUse?.profession || dbProfile?.profession;
+            }
+            if (dataToUse?.workingHours || dbProfile?.workingTime) {
+              previousAnswers.workingHours = dataToUse?.workingHours || dbProfile?.workingTime;
+            }
+            if (dataToUse?.workStress || dbProfile?.workStress) {
+              previousAnswers.workStress = dataToUse?.workStress || dbProfile?.workStress;
+            }
+            if (dataToUse?.smoking || dbProfile?.smoking) {
+              previousAnswers.smoking = dataToUse?.smoking || dbProfile?.smoking;
+            }
+            if (dataToUse?.waterQuality || dbProfile?.water_quality) {
+              previousAnswers.waterQuality = dataToUse?.waterQuality || dbProfile?.water_quality;
+            }
+            if (dataToUse?.acUsage || dbProfile?.ac_usage) {
+              previousAnswers.acUsage = dataToUse?.acUsage || dbProfile?.ac_usage;
+            }
+            
+            // Demographic fields
+            if (dataToUse?.gender || dbProfile?.gender) {
+              previousAnswers.gender = dataToUse?.gender || dbProfile?.gender;
+            }
+            if (dataToUse?.birthdate || dbProfile?.birthdate || dbProfile?.date_of_birth) {
+              previousAnswers.birthdate = dataToUse?.birthdate || dbProfile?.birthdate || dbProfile?.date_of_birth;
+            }
+            if (dataToUse?.city || dbProfile?.city) {
+              previousAnswers.city = dataToUse?.city || dbProfile?.city;
+            }
+            if (dataToUse?.state || dbProfile?.state) {
+              previousAnswers.state = dataToUse?.state || dbProfile?.state;
+            }
           }
           
           // Only set answers if we have at least some actual data
           if (Object.keys(previousAnswers).length > 0) {
+            console.log('📋 Setting questionnaire answers:', previousAnswers);
+            console.log('📋 primarySkinConcern value:', previousAnswers.primarySkinConcern);
+            console.log('📋 primarySkinConcern type:', typeof previousAnswers.primarySkinConcern);
+            console.log('📋 primarySkinConcern is array:', Array.isArray(previousAnswers.primarySkinConcern));
+            console.log('📋 All keys in previousAnswers:', Object.keys(previousAnswers));
+            
+            // Ensure primarySkinConcern is properly set as an array
+            if (!previousAnswers.primarySkinConcern && dataToUse?.primarySkinConcern) {
+              previousAnswers.primarySkinConcern = Array.isArray(dataToUse.primarySkinConcern)
+                ? dataToUse.primarySkinConcern
+                : [dataToUse.primarySkinConcern];
+              console.log('📋 Fixed primarySkinConcern from dataToUse:', previousAnswers.primarySkinConcern);
+            }
+            
             setQuestionnaireAnswers(previousAnswers as QuestionnaireAnswers);
-            console.log('📋 Loaded existing questionnaire answers for user:', user.id, previousAnswers);
+            console.log('✅ Loaded existing questionnaire answers for user:', user.id, previousAnswers);
+            console.log('✅ Final primarySkinConcern after setting:', previousAnswers.primarySkinConcern);
           } else {
             setQuestionnaireAnswers(null);
-            console.log('📋 hasActualQuestionnaireData was true but no actual values found - starting fresh for user:', user.id);
+            console.log('⚠️ hasActualQuestionnaireData was true but no actual values found - starting fresh for user:', user.id);
           }
         } else {
           // Clear answers for new users without any previous questionnaire data
@@ -250,17 +384,37 @@ const KnowYourSkinPage = () => {
         }
         
         // If no answers from analysis, try latest questionnaire_history snapshot
+        // This is a final fallback - but we should have already loaded this above
         if (!questionnaireAnswers) {
           const { data: qh } = await supabase
             .from('questionnaire_history')
             .select('questionnaire_data')
             .eq('user_id', user.id)
+            .eq('questionnaire_type', 'skin')
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
           if (qh?.questionnaire_data) {
-            setQuestionnaireAnswers(qh.questionnaire_data as QuestionnaireAnswers);
-            console.log('📋 Loaded previous questionnaire answers from questionnaire_history');
+            let finalData = qh.questionnaire_data;
+            // Parse if string
+            if (typeof finalData === 'string') {
+              try {
+                finalData = JSON.parse(finalData);
+              } catch (e) {
+                console.error('Error parsing questionnaire_data in fallback:', e);
+              }
+            }
+            // Ensure primarySkinConcern is an array
+            if (finalData && typeof finalData === 'object') {
+              if (finalData.primarySkinConcern && !Array.isArray(finalData.primarySkinConcern)) {
+                finalData.primarySkinConcern = typeof finalData.primarySkinConcern === 'string' 
+                  ? [finalData.primarySkinConcern] 
+                  : [String(finalData.primarySkinConcern)];
+              }
+            }
+            setQuestionnaireAnswers(finalData as QuestionnaireAnswers);
+            console.log('📋 Loaded previous questionnaire answers from questionnaire_history (fallback)');
+            console.log('📋 Fallback primarySkinConcern:', finalData?.primarySkinConcern);
           }
         }
 

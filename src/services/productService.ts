@@ -79,17 +79,21 @@ export async function getProductsForParameter(
 /**
  * Get products for multiple parameters and their severities
  * Used when user has multiple parameters detected
+ * FIXED: Now uses Promise.all for parallel fetching instead of sequential
  */
 export async function getProductsForParameters(
   parameterSeverities: Array<{ parameterId: string; severity: string }>
 ): Promise<ParameterProduct[]> {
   try {
-    const allProducts: ParameterProduct[] = []
-
-    for (const { parameterId, severity } of parameterSeverities) {
-      const products = await getProductsForParameter(parameterId, severity)
-      allProducts.push(...products)
-    }
+    // Fetch all products in parallel instead of sequentially
+    const productPromises = parameterSeverities.map(({ parameterId, severity }) =>
+      getProductsForParameter(parameterId, severity)
+    )
+    
+    const productArrays = await Promise.all(productPromises)
+    
+    // Flatten all products into single array
+    const allProducts = productArrays.flat()
 
     // Remove duplicates and sort by primary first, then display order
     const uniqueProducts = Array.from(
@@ -134,6 +138,7 @@ export async function getParameterByName(parameterName: string): Promise<Paramet
     return null
   }
 }
+
 
 
 

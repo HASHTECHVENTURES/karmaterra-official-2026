@@ -146,27 +146,21 @@ export default function NotificationsPage() {
         return { totalDevices: 0, uniqueUsers: 0 }
       }
 
-      // Get unique users count (users who have at least one device token)
-      const { count: uniqueUsers, error: usersError } = await supabase
-        .from('device_tokens')
-        .select('user_id', { count: 'exact', head: true })
-      
-      if (usersError) {
-        console.error('Error counting unique users:', usersError)
-        return { totalDevices: totalDevices || 0, uniqueUsers: 0 }
-      }
-
-      // Actually count distinct users properly
-      const { data: distinctUsers, error: distinctError } = await supabase
+      // Get unique users count using database-level distinct
+      // Fetch only user_id column and count unique values in JavaScript
+      // Note: Supabase doesn't support COUNT(DISTINCT) directly, so we fetch minimal data
+      const { data: userIds, error: distinctError } = await supabase
         .from('device_tokens')
         .select('user_id')
+        .limit(10000) // Reasonable limit for counting
       
       if (distinctError) {
         console.error('Error getting distinct users:', distinctError)
         return { totalDevices: totalDevices || 0, uniqueUsers: 0 }
       }
 
-      const uniqueUserIds = new Set(distinctUsers?.map(d => d.user_id) || [])
+      // Count unique user IDs efficiently
+      const uniqueUserIds = new Set(userIds?.map(d => d.user_id).filter(Boolean) || [])
       
       return {
         totalDevices: totalDevices || 0,

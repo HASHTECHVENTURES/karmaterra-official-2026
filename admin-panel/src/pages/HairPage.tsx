@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Edit, Trash2, ShoppingBag, FileQuestion, ArrowUp, ArrowDown, X, Eye, Search, Download, Copy, Grid3x3, List, Filter, BarChart3, Image as ImageIcon, GripVertical } from 'lucide-react'
+import { Plus, Edit, Trash2, ShoppingBag, FileQuestion, Target, ArrowUp, ArrowDown, X, Eye, Search, Download, Copy, Grid3x3, List, Filter, BarChart3, Image as ImageIcon, GripVertical, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -21,19 +21,6 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-interface HairTypeProduct {
-  id: string
-  hair_type: string
-  product_name: string
-  product_description?: string
-  product_link?: string
-  product_image?: string
-  display_order: number
-  is_active: boolean
-}
-
-// Removed HAIR_TYPES - products are no longer categorized by hair type
-
 interface HairQuestion {
   id: string
   question_text: string
@@ -44,6 +31,39 @@ interface HairQuestion {
   is_active: boolean
   icon_name?: string
   help_text?: string
+}
+
+interface Parameter {
+  id: string
+  parameter_name: string
+  parameter_description: string | null
+  category: string
+  ai_detection_instructions: string | null
+  display_order: number
+  is_active: boolean
+  severity_levels: string[]
+}
+
+interface Product {
+  id: string
+  parameter_id: string
+  severity_level: string
+  product_name: string
+  product_description: string | null
+  product_link: string | null
+  product_image: string | null
+  display_order: number
+  is_active: boolean
+  is_primary: boolean
+}
+
+interface RatingConfig {
+  low_min: number
+  low_max: number
+  medium_min: number
+  medium_max: number
+  high_min: number
+  high_max: number
 }
 
 // ==================== SORTABLE QUESTION ROW ====================
@@ -167,22 +187,36 @@ function SortableHairQuestionRow({
 }
 
 export default function HairPage() {
-  const [editingProduct, setEditingProduct] = useState<HairTypeProduct | null>(null)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [activeTab, setActiveTab] = useState<'products' | 'questions' | 'reports'>('products')
+  const [activeTab, setActiveTab] = useState<'questions' | 'parameters' | 'products' | 'reports' | 'rating-config'>('questions')
+  const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const [showReportDetails, setShowReportDetails] = useState(false)
+  
+  // Rating configuration state
+  const [ratingConfig, setRatingConfig] = useState<RatingConfig>({
+    low_min: 1,
+    low_max: 3,
+    medium_min: 4,
+    medium_max: 7,
+    high_min: 8,
+    high_max: 10,
+  })
+
+  // Questions state
   const [editingQuestion, setEditingQuestion] = useState<HairQuestion | null>(null)
   const [showQuestionForm, setShowQuestionForm] = useState(false)
-  const queryClient = useQueryClient()
-  
-  // Products view state
-  const [productSearchTerm, setProductSearchTerm] = useState('')
-  const [productViewMode, setProductViewMode] = useState<'table' | 'grid'>('table')
-  const [productFilterStatus, setProductFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
-  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
-  const [showProductPreview, setShowProductPreview] = useState<HairTypeProduct | null>(null)
+
+  // Parameters state
+  const [editingParameter, setEditingParameter] = useState<Parameter | null>(null)
+  const [showParameterForm, setShowParameterForm] = useState(false)
+
+  // Products state
+  const [selectedParameter, setSelectedParameter] = useState<string | null>(null)
+  const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [showProductForm, setShowProductForm] = useState(false)
+  const [showBulkImageExtractor, setShowBulkImageExtractor] = useState(false)
   
   // Drag and drop sensors - must be at top level (Rules of Hooks)
   const sensors = useSensors(
@@ -192,39 +226,7 @@ export default function HairPage() {
     })
   )
 
-  const { data: products, isLoading } = useQuery({
-    queryKey: ['hair-products'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('hair_type_products')
-        .select('*')
-        .order('display_order', { ascending: true })
-
-      if (error) throw error
-      return (data as HairTypeProduct[]) || []
-    },
-  })
-  
-  // Filter products
-  const filteredProducts = products?.filter(product => {
-    const matchesSearch = !productSearchTerm || 
-      product.product_name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
-      product.product_description?.toLowerCase().includes(productSearchTerm.toLowerCase())
-    
-    const matchesStatus = productFilterStatus === 'all' || 
-      (productFilterStatus === 'active' && product.is_active) ||
-      (productFilterStatus === 'inactive' && !product.is_active)
-    
-    return matchesSearch && matchesStatus
-  }) || []
-  
-  // Calculate stats
-  const productStats = {
-    total: products?.length || 0,
-    active: products?.filter(p => p.is_active).length || 0,
-    inactive: products?.filter(p => !p.is_active).length || 0,
-  }
-
+  // Fetch questions
   const { data: questions, isLoading: questionsLoading } = useQuery({
     queryKey: ['hair-questions'],
     queryFn: async () => {
@@ -232,7 +234,6 @@ export default function HairPage() {
         .from('hair_questions')
         .select('*')
         .order('display_order', { ascending: true })
-
       if (error) throw error
       
       // Parse JSONB answer_options
@@ -243,119 +244,194 @@ export default function HairPage() {
     },
   })
 
-  const deleteMutation = useMutation({
+  // Fetch parameters
+  const { data: parameters, isLoading: parametersLoading } = useQuery({
+    queryKey: ['hair-parameters'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hair_analysis_parameters')
+        .select('*')
+        .order('display_order', { ascending: true })
+      if (error) throw error
+      return (data as Parameter[]) || []
+    },
+  })
+
+  // View mode: 'filtered' (by parameter/severity) or 'all' (all products)
+  const [productsViewMode, setProductsViewMode] = useState<'filtered' | 'all'>('filtered')
+
+  // Fetch products (depends on selected parameter and severity)
+  const { data: filteredProducts, isLoading: filteredProductsLoading } = useQuery({
+    queryKey: ['hair-products-filtered', selectedParameter, selectedSeverity],
+    queryFn: async () => {
+      if (!selectedParameter || !selectedSeverity) return []
+      const { data, error } = await supabase
+        .from('hair_parameter_products')
+        .select('*')
+        .eq('parameter_id', selectedParameter)
+        .eq('severity_level', selectedSeverity)
+        .order('display_order', { ascending: true })
+      if (error) throw error
+      return (data as Product[]) || []
+    },
+    enabled: !!selectedParameter && !!selectedSeverity && productsViewMode === 'filtered',
+  })
+
+  // Fetch all products
+  const { data: allProducts, isLoading: allProductsLoading } = useQuery({
+    queryKey: ['hair-products-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('hair_parameter_products')
+        .select('*')
+        .order('display_order', { ascending: true })
+      if (error) throw error
+      return (data as Product[]) || []
+    },
+    enabled: productsViewMode === 'all',
+  })
+
+  // Use the appropriate products based on view mode
+  const products = productsViewMode === 'all' ? (allProducts || []) : (filteredProducts || [])
+  const productsLoading = productsViewMode === 'all' ? allProductsLoading : filteredProductsLoading
+
+  // Auto-select first parameter and severity for products tab
+  useEffect(() => {
+    if (activeTab === 'products' && parameters && parameters.length > 0 && !selectedParameter) {
+      const firstParam = parameters[0]
+      setSelectedParameter(firstParam.id)
+      if (firstParam.severity_levels.length > 0) {
+        setSelectedSeverity(firstParam.severity_levels[0])
+      }
+    }
+  }, [activeTab, parameters, selectedParameter])
+
+  // Fetch rating configuration
+  const { data: storedRatingConfig } = useQuery({
+    queryKey: ['hair-rating-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('hair_rating_config')
+        .maybeSingle()
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching rating config:', error)
+        return null
+      }
+      
+      if (data?.hair_rating_config) {
+        return data.hair_rating_config as RatingConfig
+      }
+      return null
+    },
+  })
+
+  useEffect(() => {
+    if (storedRatingConfig) {
+      setRatingConfig(storedRatingConfig)
+    }
+  }, [storedRatingConfig])
+
+  // Save rating configuration
+  const saveRatingConfigMutation = useMutation({
+    mutationFn: async (config: RatingConfig) => {
+      // Validate ranges
+      if (config.low_min < 1 || config.low_max > 10 || 
+          config.medium_min < 1 || config.medium_max > 10 ||
+          config.high_min < 1 || config.high_max > 10) {
+        throw new Error('All values must be between 1 and 10')
+      }
+      
+      if (config.low_max >= config.medium_min || config.medium_max >= config.high_min) {
+        throw new Error('Ranges must not overlap. Low max must be less than Medium min, and Medium max must be less than High min')
+      }
+
+      // Get existing config
+      const { data: existingConfig } = await supabase
+        .from('app_config')
+        .select('id, hair_rating_config')
+        .maybeSingle()
+
+      if (existingConfig?.id) {
+        const { error } = await supabase
+          .from('app_config')
+          .update({ hair_rating_config: config })
+          .eq('id', existingConfig.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('app_config')
+          .insert([{ hair_rating_config: config }])
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success('Rating configuration saved successfully')
+      queryClient.invalidateQueries({ queryKey: ['hair-rating-config'] })
+      queryClient.invalidateQueries({ queryKey: ['hair-reports'] })
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to save rating configuration')
+    },
+  })
+
+  const currentParameter = parameters?.find((p) => p.id === selectedParameter)
+  const severityLevels = currentParameter?.severity_levels || ['High', 'Medium', 'Low']
+
+  // Parameter mutations
+  const deleteParameterMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('hair_type_products').delete().eq('id', id)
+      const { error } = await supabase.from('hair_analysis_parameters').delete().eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hair-products'] })
-      toast.success('Product deleted successfully')
-      setSelectedProducts(new Set())
+      queryClient.invalidateQueries({ queryKey: ['hair-parameters'] })
+      toast.success('Parameter deleted successfully')
     },
   })
-  
-  const bulkDeleteMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from('hair_type_products').delete().in('id', ids)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hair-products'] })
-      toast.success(`Deleted ${selectedProducts.size} product(s) successfully`)
-      setSelectedProducts(new Set())
-    },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to delete products')
-    },
-  })
-  
-  const bulkToggleActiveMutation = useMutation({
-    mutationFn: async ({ ids, isActive }: { ids: string[]; isActive: boolean }) => {
-      const { error } = await supabase
-        .from('hair_type_products')
-        .update({ is_active: !isActive })
-        .in('id', ids)
-      if (error) throw error
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hair-products'] })
-      toast.success(`Updated ${selectedProducts.size} product(s)`)
-      setSelectedProducts(new Set())
-    },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to update products')
-    },
-  })
-  
-  const toggleActiveMutation = useMutation({
+
+  const toggleParameterActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       const { error } = await supabase
-        .from('hair_type_products')
+        .from('hair_analysis_parameters')
         .update({ is_active: !isActive })
         .eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hair-products'] })
-      toast.success('Product status updated')
+      queryClient.invalidateQueries({ queryKey: ['hair-parameters'] })
+      toast.success('Parameter status updated')
     },
   })
-  
-  const duplicateMutation = useMutation({
-    mutationFn: async (product: HairTypeProduct) => {
-      const { data, error } = await supabase
-        .from('hair_type_products')
-        .insert({
-          hair_type: product.hair_type,
-          product_name: `${product.product_name} (Copy)`,
-          product_description: product.product_description,
-          product_link: product.product_link,
-          product_image: product.product_image,
-          display_order: (products?.length || 0) + 1,
-          is_active: false,
-        })
-        .select()
-        .single()
-      if (error) throw error
-      return data
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hair-products'] })
-      toast.success('Product duplicated successfully')
-    },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to duplicate product')
-    },
-  })
-  
-  const updateOrderMutation = useMutation({
+
+  const updateParameterOrderMutation = useMutation({
     mutationFn: async ({ id, newOrder }: { id: string; newOrder: number }) => {
       const { error } = await supabase
-        .from('hair_type_products')
+        .from('hair_analysis_parameters')
         .update({ display_order: newOrder })
         .eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hair-products'] })
+      queryClient.invalidateQueries({ queryKey: ['hair-parameters'] })
     },
   })
-  
-  const handleMoveUp = (index: number) => {
-    if (index === 0 || !filteredProducts) return
-    const product = filteredProducts[index]
-    const prevProduct = filteredProducts[index - 1]
-    updateOrderMutation.mutate({ id: product.id, newOrder: prevProduct.display_order })
-    updateOrderMutation.mutate({ id: prevProduct.id, newOrder: product.display_order })
+
+  const handleParameterMoveUp = (index: number) => {
+    if (index === 0 || !parameters) return
+    const param = parameters[index]
+    const prevParam = parameters[index - 1]
+    updateParameterOrderMutation.mutate({ id: param.id, newOrder: prevParam.display_order })
+    updateParameterOrderMutation.mutate({ id: prevParam.id, newOrder: param.display_order })
   }
-  
-  const handleMoveDown = (index: number) => {
-    if (!filteredProducts || index === filteredProducts.length - 1) return
-    const product = filteredProducts[index]
-    const nextProduct = filteredProducts[index + 1]
-    updateOrderMutation.mutate({ id: product.id, newOrder: nextProduct.display_order })
-    updateOrderMutation.mutate({ id: nextProduct.id, newOrder: product.display_order })
+
+  const handleParameterMoveDown = (index: number) => {
+    if (!parameters || index === parameters.length - 1) return
+    const param = parameters[index]
+    const nextParam = parameters[index + 1]
+    updateParameterOrderMutation.mutate({ id: param.id, newOrder: nextParam.display_order })
+    updateParameterOrderMutation.mutate({ id: nextParam.id, newOrder: param.display_order })
   }
 
   // Delete report mutation
@@ -381,8 +457,15 @@ export default function HairPage() {
       
       const doc = new jsPDF()
       const report = analysis.analysis_result
-      const overallHealth = report?.hair_analysis?.["Overall Hair Health"]
-      const severity = overallHealth?.severity || 'N/A'
+      
+      // Try multiple possible structures for the report data
+      const hairAnalysis = report?.hair_analysis || report?.result?.hair_analysis
+      const overallHealth = hairAnalysis?.["Overall Hair Health"]
+      const result = report?.result
+      const parameters = result?.parameters || []
+      const summary = result?.summary || report?.summary
+      const overallSeverity = result?.overallSeverity || report?.overallSeverity || overallHealth?.severity || 'N/A'
+      const images = report?.faceImages || report?.result?.faceImages || []
       
       let yPos = 20
       const pageWidth = doc.internal.pageSize.getWidth()
@@ -434,12 +517,29 @@ export default function HairPage() {
       yPos += 6
       doc.text(`Date: ${new Date(analysis.created_at).toLocaleString()}`, margin, yPos)
       yPos += 6
-      doc.text(`Severity: ${severity}`, margin, yPos)
+      doc.text(`Overall Severity: ${overallSeverity}`, margin, yPos)
       yPos += 10
       
+      // Summary
+      if (summary) {
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(12)
+        doc.text('Summary', margin, yPos)
+        yPos += 7
+        
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(10)
+        const summaryLines = doc.splitTextToSize(summary, maxWidth)
+        doc.text(summaryLines, margin, yPos)
+        yPos += summaryLines.length * 5 + 5
+      }
+      
       // Analysis Images
-      if (report?.faceImages && report.faceImages.length > 0) {
-        // Check if we need a new page
+      if (images && images.length > 0) {
         if (yPos > 200) {
           doc.addPage()
           yPos = 20
@@ -451,16 +551,14 @@ export default function HairPage() {
         yPos += 10
         
         const imageLabels = ['Front Face', 'Right Side', 'Left Side']
-        const imagesPerRow = report.faceImages.length <= 2 ? report.faceImages.length : 3
+        const imagesPerRow = images.length <= 2 ? images.length : 3
         const imageWidth = (maxWidth - (imagesPerRow - 1) * 5) / imagesPerRow
-        const imageHeight = imageWidth * 0.75 // Aspect ratio
+        const imageHeight = imageWidth * 0.75
         
         let currentX = margin
         let maxY = yPos
         
-        // Add images in rows
-        for (let i = 0; i < report.faceImages.length; i++) {
-          // Check if we need a new page
+        for (let i = 0; i < images.length; i++) {
           if (yPos > 200) {
             doc.addPage()
             yPos = 20
@@ -468,12 +566,11 @@ export default function HairPage() {
           }
           
           const label = imageLabels[i] || `Image ${i + 1}`
-          const newY = await addImageToPDF(report.faceImages[i], currentX, yPos, imageWidth, imageHeight, label)
+          const newY = await addImageToPDF(images[i], currentX, yPos, imageWidth, imageHeight, label)
           maxY = Math.max(maxY, newY)
           
           currentX += imageWidth + 5
           
-          // Move to next row if needed
           if ((i + 1) % imagesPerRow === 0) {
             yPos = maxY + 5
             currentX = margin
@@ -486,6 +583,10 @@ export default function HairPage() {
       
       // Overall Health
       if (overallHealth) {
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(12)
         doc.text('Overall Hair Health', margin, yPos)
@@ -505,14 +606,63 @@ export default function HairPage() {
         yPos += 5
       }
       
-      // Check if we need a new page
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
-      }
+      // Detailed Analysis - Show configured parameters
+      // Map AI analysis results to configured parameters
+      const potentialIssues = hairAnalysis?.["4. Potential Issues"]
+      const scalpHealth = hairAnalysis?.["2. Scalp Health and Condition"]
+      const hairTexture = hairAnalysis?.["3. Hair Texture and Quality"]
       
-      // Detailed Analysis
-      if (report?.hair_analysis) {
+      // Define the configured parameters and map them to AI analysis data
+      const configuredParameters = [
+        {
+          name: 'Dandruff',
+          description: 'Presence of white or yellowish flakes on the scalp and hair',
+          data: potentialIssues?.dandruff,
+          severity: potentialIssues?.severity,
+          rating: potentialIssues?.rating,
+          notes: potentialIssues?.notes
+        },
+        {
+          name: 'Frizzy Hair',
+          description: 'Hair that appears unruly, lacks smoothness, and has flyaway strands',
+          data: hairTexture ? `${hairTexture.texture || ''} ${hairTexture.quality || ''}`.trim() : null,
+          severity: hairTexture?.severity,
+          rating: hairTexture?.rating,
+          notes: hairTexture?.notes
+        },
+        {
+          name: 'Dry and Damaged Scalp',
+          description: 'Scalp showing signs of dryness, flakiness, tightness, or damage',
+          data: scalpHealth?.dryness_or_oiliness || potentialIssues?.damage,
+          severity: scalpHealth?.severity || potentialIssues?.severity,
+          rating: scalpHealth?.rating || potentialIssues?.rating,
+          notes: scalpHealth?.notes || potentialIssues?.notes
+        },
+        {
+          name: 'Oily Scalp',
+          description: 'Excessive oil production on the scalp making hair appear greasy',
+          data: scalpHealth?.dryness_or_oiliness,
+          severity: scalpHealth?.severity,
+          rating: scalpHealth?.rating,
+          notes: scalpHealth?.notes
+        },
+        {
+          name: 'Itchy Scalp',
+          description: 'Scalp discomfort characterized by itching sensation',
+          data: scalpHealth?.redness_or_irritation,
+          severity: scalpHealth?.severity,
+          rating: scalpHealth?.rating,
+          notes: scalpHealth?.notes
+        }
+      ]
+      
+      // Show Detailed Analysis with configured parameters
+      if (hairAnalysis || parameters.length > 0) {
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
+        
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(12)
         doc.text('Detailed Analysis', margin, yPos)
@@ -521,10 +671,8 @@ export default function HairPage() {
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(10)
         
-        Object.entries(report.hair_analysis).forEach(([key, value]: [string, any]) => {
-          if (key === "Overall Hair Health" || key === "6. Recommendations for Improvement") return
-          
-          // Check if we need a new page
+        // Show configured parameters
+        configuredParameters.forEach((param) => {
           if (yPos > 250) {
             doc.addPage()
             yPos = 20
@@ -532,36 +680,53 @@ export default function HairPage() {
           
           doc.setFont('helvetica', 'bold')
           doc.setFontSize(10)
-          const keyLines = doc.splitTextToSize(key, maxWidth)
-          doc.text(keyLines, margin, yPos)
-          yPos += keyLines.length * 5
+          const paramNameLines = doc.splitTextToSize(param.name, maxWidth)
+          doc.text(paramNameLines, margin, yPos)
+          yPos += paramNameLines.length * 5
           
           doc.setFont('helvetica', 'normal')
-          if (value.severity) {
-            doc.text(`Severity: ${value.severity}`, margin, yPos)
+          doc.setFontSize(9)
+          const descLines = doc.splitTextToSize(param.description, maxWidth)
+          doc.text(descLines, margin, yPos)
+          yPos += descLines.length * 5
+          
+          if (param.severity) {
+            doc.setFont('helvetica', 'bold')
+            doc.text(`Severity: ${param.severity}`, margin, yPos)
             yPos += 6
           }
-          if (value.description) {
-            const descLines = doc.splitTextToSize(value.description, maxWidth)
-            doc.text(descLines, margin, yPos)
-            yPos += descLines.length * 5
-          }
-          if (value.rating) {
-            doc.text(`Rating: ${value.rating}/10`, margin, yPos)
+          if (param.rating) {
+            doc.setFont('helvetica', 'normal')
+            doc.text(`Rating: ${param.rating}/10`, margin, yPos)
             yPos += 6
           }
+          if (param.data) {
+            doc.setFont('helvetica', 'normal')
+            const dataLines = doc.splitTextToSize(param.data, maxWidth)
+            doc.text(dataLines, margin, yPos)
+            yPos += dataLines.length * 5
+          }
+          if (param.notes) {
+            doc.setFont('helvetica', 'italic')
+            doc.setFontSize(9)
+            const notesLines = doc.splitTextToSize(`Notes: ${param.notes}`, maxWidth)
+            doc.text(notesLines, margin, yPos)
+            yPos += notesLines.length * 5
+          }
+          
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(10)
           yPos += 5
         })
       }
       
-      // Check if we need a new page
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
-      }
-      
       // Recommendations
-      if (report?.hair_analysis?.["6. Recommendations for Improvement"]) {
+      if (hairAnalysis?.["6. Recommendations for Improvement"]) {
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
+        
         doc.setFont('helvetica', 'bold')
         doc.setFontSize(12)
         doc.text('Recommendations', margin, yPos)
@@ -570,8 +735,24 @@ export default function HairPage() {
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(10)
         
-        Object.entries(report.hair_analysis["6. Recommendations for Improvement"]).forEach(([key, value]: [string, any]) => {
-          // Check if we need a new page
+        Object.entries(hairAnalysis["6. Recommendations for Improvement"]).forEach(([key, value]: [string, any]) => {
+          if (key === 'rating' || key === 'severity' || key === 'notes') {
+            if (key === 'notes' && value) {
+              if (yPos > 250) {
+                doc.addPage()
+                yPos = 20
+              }
+              doc.setFont('helvetica', 'bold')
+              doc.text('General Notes:', margin, yPos)
+              yPos += 6
+              doc.setFont('helvetica', 'normal')
+              const notesLines = doc.splitTextToSize(String(value), maxWidth)
+              doc.text(notesLines, margin, yPos)
+              yPos += notesLines.length * 5 + 3
+            }
+            return
+          }
+          
           if (yPos > 250) {
             doc.addPage()
             yPos = 20
@@ -589,6 +770,60 @@ export default function HairPage() {
         })
       }
       
+      // Routine Recommendations (from converted format)
+      if (result?.routine) {
+        if (yPos > 250) {
+          doc.addPage()
+          yPos = 20
+        }
+        
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(12)
+        doc.text('Recommended Routines', margin, yPos)
+        yPos += 7
+        
+        if (result.routine.morning && result.routine.morning.length > 0) {
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(10)
+          doc.text('Morning Routine:', margin, yPos)
+          yPos += 6
+          
+          doc.setFont('helvetica', 'normal')
+          result.routine.morning.forEach((routine: string) => {
+            if (yPos > 250) {
+              doc.addPage()
+              yPos = 20
+            }
+            const routineLines = doc.splitTextToSize(`• ${routine}`, maxWidth)
+            doc.text(routineLines, margin + 5, yPos)
+            yPos += routineLines.length * 5
+          })
+          yPos += 3
+        }
+        
+        if (result.routine.evening && result.routine.evening.length > 0) {
+          if (yPos > 250) {
+            doc.addPage()
+            yPos = 20
+          }
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(10)
+          doc.text('Evening Routine:', margin, yPos)
+          yPos += 6
+          
+          doc.setFont('helvetica', 'normal')
+          result.routine.evening.forEach((routine: string) => {
+            if (yPos > 250) {
+              doc.addPage()
+              yPos = 20
+            }
+            const routineLines = doc.splitTextToSize(`• ${routine}`, maxWidth)
+            doc.text(routineLines, margin + 5, yPos)
+            yPos += routineLines.length * 5
+          })
+        }
+      }
+      
       // Save PDF
       const fileName = `hair-report-${analysis.id}-${new Date(analysis.created_at).toISOString().split('T')[0]}.pdf`
       doc.save(fileName)
@@ -599,13 +834,20 @@ export default function HairPage() {
     }
   }
 
-  // Fetch hair reports
+  // Fetch hair reports - FIXED: Use join to avoid N+1 queries
   const { data: reports, isLoading: reportsLoading } = useQuery({
     queryKey: ['hair-reports', searchTerm],
     queryFn: async () => {
+      // Use join to fetch user profiles in single query
       let query = supabase
         .from('analysis_history')
-        .select('*')
+        .select(`
+          *,
+          profiles:user_id (
+            full_name,
+            email
+          )
+        `)
         .eq('analysis_type', 'hair')
         .order('created_at', { ascending: false })
 
@@ -613,37 +855,26 @@ export default function HairPage() {
 
       if (error) throw error
 
-      // Get user profiles for each analysis
-      const reportsWithUsers = await Promise.all(
-        (data || []).map(async (item: any) => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', item.user_id)
-            .single()
-
-          // Filter by search term if provided
-          const matchesSearch = !searchTerm || 
-            profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            profile?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-
-          if (!matchesSearch && searchTerm) return null
-
-          return {
-            ...item,
-            user: profile || null
-          }
+      // Filter by search term if provided (after fetching with join)
+      let filteredData = data || []
+      if (searchTerm) {
+        filteredData = filteredData.filter((item: any) => {
+          const profile = item.profiles
+          return profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                 profile?.email?.toLowerCase().includes(searchTerm.toLowerCase())
         })
-      )
+      }
 
-      return reportsWithUsers.filter(Boolean)
+      // Map to expected format
+      const reportsWithUsers = filteredData.map((item: any) => ({
+        ...item,
+        user: item.profiles || null
+      }))
+
+      return reportsWithUsers
     },
     enabled: activeTab === 'reports',
   })
-
-  if (isLoading && activeTab !== 'reports') {
-    return <div className="text-center py-12">Loading products...</div>
-  }
 
   return (
     <div>
@@ -667,6 +898,17 @@ export default function HairPage() {
               Questions
             </button>
             <button
+              onClick={() => setActiveTab('parameters')}
+              className={`px-6 py-4 text-sm font-medium border-b-2 ${
+                activeTab === 'parameters'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Target className="w-5 h-5 inline mr-2" />
+              Parameters
+            </button>
+            <button
               onClick={() => setActiveTab('products')}
               className={`px-6 py-4 text-sm font-medium border-b-2 ${
                 activeTab === 'products'
@@ -687,6 +929,17 @@ export default function HairPage() {
             >
               <Eye className="w-5 h-5 inline mr-2" />
               Reports
+            </button>
+            <button
+              onClick={() => setActiveTab('rating-config')}
+              className={`px-6 py-4 text-sm font-medium border-b-2 ${
+                activeTab === 'rating-config'
+                  ? 'border-purple-600 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <BarChart3 className="w-5 h-5 inline mr-2" />
+              Rating Config
             </button>
           </nav>
         </div>
@@ -835,547 +1088,92 @@ export default function HairPage() {
         </div>
       )}
 
+      {/* Parameters Tab */}
+      {activeTab === 'parameters' && (
+        <ParametersTab
+          parameters={parameters || []}
+          isLoading={parametersLoading}
+          editingParameter={editingParameter}
+          showParameterForm={showParameterForm}
+          onEdit={(p) => {
+            setEditingParameter(p)
+            setShowParameterForm(true)
+          }}
+          onAdd={() => {
+            setEditingParameter(null)
+            setShowParameterForm(true)
+          }}
+          onClose={() => {
+            setShowParameterForm(false)
+            setEditingParameter(null)
+          }}
+          onSuccess={() => {
+            setShowParameterForm(false)
+            setEditingParameter(null)
+            queryClient.invalidateQueries({ queryKey: ['hair-parameters'] })
+          }}
+          onDelete={(id) => deleteParameterMutation.mutate(id)}
+          onToggleActive={(id, isActive) => toggleParameterActiveMutation.mutate({ id, isActive })}
+          onMoveUp={handleParameterMoveUp}
+          onMoveDown={handleParameterMoveDown}
+          sensors={sensors}
+        />
+      )}
+
       {/* Products Tab */}
       {activeTab === 'products' && (
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-gray-900">Product Management</h2>
-            <button
-              onClick={() => {
-                setEditingProduct(null)
-                setShowAddForm(true)
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Add Product
-            </button>
-          </div>
+        <ProductsTab
+          parameters={parameters || []}
+          products={products || []}
+          isLoading={productsLoading}
+          selectedParameter={selectedParameter}
+          selectedSeverity={selectedSeverity}
+          severityLevels={severityLevels}
+          currentParameter={currentParameter}
+          editingProduct={editingProduct}
+          showProductForm={showProductForm}
+          onParameterChange={(paramId) => {
+            setSelectedParameter(paramId)
+            const param = parameters?.find((p) => p.id === paramId)
+            if (param && param.severity_levels.length > 0) {
+              setSelectedSeverity(param.severity_levels[0])
+            }
+          }}
+          onSeverityChange={(severity) => setSelectedSeverity(severity)}
+          onEdit={(p) => {
+            setEditingProduct(p)
+            setShowProductForm(true)
+          }}
+          onAdd={() => {
+            setEditingProduct(null)
+            setShowProductForm(true)
+          }}
+          onClose={() => {
+            setShowProductForm(false)
+            setEditingProduct(null)
+          }}
+          onSuccess={() => {
+            setShowProductForm(false)
+            setEditingProduct(null)
+            queryClient.invalidateQueries({ queryKey: ['hair-products-filtered'] })
+            queryClient.invalidateQueries({ queryKey: ['hair-products-all'] })
+          }}
+          productsViewMode={productsViewMode}
+          onViewModeChange={setProductsViewMode}
+          showBulkImageExtractor={showBulkImageExtractor}
+          onBulkImageExtractorOpen={() => setShowBulkImageExtractor(true)}
+          onBulkImageExtractorClose={() => setShowBulkImageExtractor(false)}
+        />
+      )}
 
-          {showAddForm && (
-            <HairProductForm
-              product={editingProduct}
-              onClose={() => {
-                setShowAddForm(false)
-                setEditingProduct(null)
-              }}
-              onSuccess={() => {
-                setShowAddForm(false)
-                setEditingProduct(null)
-                queryClient.invalidateQueries({ queryKey: ['hair-products'] })
-              }}
-            />
-          )}
-
-          {/* Quick Stats Dashboard */}
-          {products && products.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-purple-600 font-medium">Total Products</p>
-                    <p className="text-2xl font-bold text-purple-900">{productStats.total}</p>
-                  </div>
-                  <BarChart3 className="w-8 h-8 text-purple-500" />
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-[#d4a574] font-medium">Active</p>
-                    <p className="text-2xl font-bold text-green-900">{productStats.active}</p>
-                  </div>
-                  <ShoppingBag className="w-8 h-8 text-green-500" />
-                </div>
-              </div>
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">Inactive</p>
-                    <p className="text-2xl font-bold text-gray-900">{productStats.inactive}</p>
-                  </div>
-                  <X className="w-8 h-8 text-gray-500" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-            {/* Header with Search, Filters, and View Toggle */}
-            <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">All Hair Products</h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {filteredProducts.length} of {products?.length || 0} product(s) shown
-                      {selectedProducts.size > 0 && (
-                        <span className="ml-2 text-purple-600 font-medium">
-                          ({selectedProducts.size} selected)
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* View Toggle */}
-                    <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-300 p-1">
-                      <button
-                        onClick={() => setProductViewMode('table')}
-                        className={`p-2 rounded ${productViewMode === 'table' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                        title="Table View"
-                      >
-                        <List className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setProductViewMode('grid')}
-                        className={`p-2 rounded ${productViewMode === 'grid' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-50'}`}
-                        title="Grid View"
-                      >
-                        <Grid3x3 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {selectedProducts.size > 0 && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            const selected = Array.from(selectedProducts)
-                            const allActive = selected.every(id => 
-                              products?.find(p => p.id === id)?.is_active
-                            )
-                            bulkToggleActiveMutation.mutate({
-                              ids: selected,
-                              isActive: allActive
-                            })
-                          }}
-                          disabled={bulkToggleActiveMutation.isPending}
-                          className="px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 transition-colors"
-                        >
-                          {bulkToggleActiveMutation.isPending ? 'Updating...' : 'Toggle Active'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to delete ${selectedProducts.size} product(s)?`)) {
-                              bulkDeleteMutation.mutate(Array.from(selectedProducts))
-                            }
-                          }}
-                          disabled={bulkDeleteMutation.isPending}
-                          className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-                        >
-                          {bulkDeleteMutation.isPending ? 'Deleting...' : `Delete (${selectedProducts.size})`}
-                        </button>
-                        <button
-                          onClick={() => setSelectedProducts(new Set())}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Search and Filters */}
-                <div className="flex flex-col md:flex-row gap-3">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="Search products by name or description..."
-                      value={productSearchTerm}
-                      onChange={(e) => setProductSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-5 h-5 text-gray-500" />
-                    <select
-                      value={productFilterStatus}
-                      onChange={(e) => setProductFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="all">All Status</option>
-                      <option value="active">Active Only</option>
-                      <option value="inactive">Inactive Only</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className="text-center py-12">Loading products...</div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="p-12 text-center">
-                <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 mb-4">
-                  {productSearchTerm || productFilterStatus !== 'all' 
-                    ? 'No products match your filters' 
-                    : 'No products configured yet'}
-                </p>
-                {productSearchTerm && (
-                  <button 
-                    onClick={() => {
-                      setProductSearchTerm('')
-                      setProductFilterStatus('all')
-                    }}
-                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 mr-2"
-                  >
-                    Clear Filters
-                  </button>
-                )}
-                {!productSearchTerm && (!products || products.length === 0) && (
-                  <button
-                    onClick={() => setShowAddForm(true)}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                  >
-                    Add First Product
-                  </button>
-                )}
-              </div>
-            ) : productViewMode === 'table' ? (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
-                      <input
-                        type="checkbox"
-                        checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedProducts(new Set(filteredProducts.map(p => p.id)))
-                          } else {
-                            setSelectedProducts(new Set())
-                          }
-                        }}
-                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                      />
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredProducts.map((product, index) => {
-                    const originalIndex = products?.findIndex(p => p.id === product.id) || 0
-                    return (
-                      <tr 
-                        key={product.id} 
-                        className={`${!product.is_active ? 'opacity-50' : ''} ${selectedProducts.has(product.id) ? 'bg-purple-50' : ''}`}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={selectedProducts.has(product.id)}
-                            onChange={(e) => {
-                              const newSelected = new Set(selectedProducts)
-                              if (e.target.checked) {
-                                newSelected.add(product.id)
-                              } else {
-                                newSelected.delete(product.id)
-                              }
-                              setSelectedProducts(newSelected)
-                            }}
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleMoveUp(index)}
-                              disabled={originalIndex === 0}
-                              className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 transition-colors"
-                            >
-                              <ArrowUp className="w-4 h-4" />
-                            </button>
-                            <span className="text-sm font-medium text-gray-900">{product.display_order}</span>
-                            <button
-                              onClick={() => handleMoveDown(index)}
-                              disabled={originalIndex === (products?.length || 0) - 1}
-                              className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 transition-colors"
-                            >
-                              <ArrowDown className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            {product.product_image ? (
-                              <button
-                                onClick={() => setShowProductPreview(product)}
-                                className="relative group"
-                              >
-                                <img
-                                  src={product.product_image}
-                                  alt={product.product_name}
-                                  className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
-                                />
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded transition-all flex items-center justify-center">
-                                  <ImageIcon className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
-                                </div>
-                              </button>
-                            ) : (
-                              <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
-                                <ImageIcon className="w-6 h-6 text-gray-400" />
-                              </div>
-                            )}
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">{product.product_name}</div>
-                              {product.product_description && (
-                                <div className="text-xs text-gray-500 mt-1 max-w-md truncate">
-                                  {product.product_description}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() => toggleActiveMutation.mutate({ id: product.id, isActive: product.is_active })}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                              product.is_active ? 'bg-[#d4a574]/10 text-[#b8956a] hover:bg-green-200' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                            }`}
-                          >
-                            {product.is_active ? 'Active' : 'Inactive'}
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => setShowProductPreview(product)} 
-                              className="text-purple-600 hover:text-purple-900 transition-colors"
-                              title="Preview"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => duplicateMutation.mutate(product)} 
-                              className="text-indigo-600 hover:text-indigo-900 transition-colors"
-                              title="Duplicate"
-                              disabled={duplicateMutation.isPending}
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setEditingProduct(product)
-                                setShowAddForm(true)
-                              }} 
-                              className="text-blue-600 hover:text-blue-900 transition-colors"
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this product?')) {
-                                  deleteMutation.mutate(product.id)
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-900 transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              /* Grid View */
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredProducts.map((product) => (
-                    <div
-                      key={product.id}
-                      className={`border rounded-lg p-4 transition-all ${
-                        !product.is_active ? 'opacity-50' : ''
-                      } ${
-                        selectedProducts.has(product.id) ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white hover:shadow-md'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedProducts.has(product.id)}
-                            onChange={(e) => {
-                              const newSelected = new Set(selectedProducts)
-                              if (e.target.checked) {
-                                newSelected.add(product.id)
-                              } else {
-                                newSelected.delete(product.id)
-                              }
-                              setSelectedProducts(newSelected)
-                            }}
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            product.is_active ? 'bg-[#d4a574]/10 text-[#b8956a]' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {product.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      {product.product_image && (
-                        <button
-                          onClick={() => setShowProductPreview(product)}
-                          className="w-full mb-3 relative group"
-                        >
-                          <img
-                            src={product.product_image}
-                            alt={product.product_name}
-                            className="w-full h-48 object-contain bg-gray-50 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                          />
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 rounded-lg transition-all flex items-center justify-center">
-                            <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100" />
-                          </div>
-                        </button>
-                      )}
-                      
-                      <h3 className="font-semibold text-gray-900 mb-2">{product.product_name}</h3>
-                      {product.product_description && (
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{product.product_description}</p>
-                      )}
-                      
-                      <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
-                        <span className="text-xs text-gray-500">Order: {product.display_order}</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setShowProductPreview(product)}
-                            className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                            title="Preview"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => duplicateMutation.mutate(product)}
-                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                            title="Duplicate"
-                            disabled={duplicateMutation.isPending}
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingProduct(product)
-                              setShowAddForm(true)
-                            }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to delete this product?')) {
-                                deleteMutation.mutate(product.id)
-                              }
-                            }}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Product Preview Modal */}
-            {showProductPreview && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowProductPreview(null)}>
-                <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-bold text-gray-900">Product Preview</h3>
-                      <button
-                        onClick={() => setShowProductPreview(null)}
-                        className="text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <X className="w-6 h-6" />
-                      </button>
-                    </div>
-                    
-                    {showProductPreview.product_image && (
-                      <div className="mb-4">
-                        <img
-                          src={showProductPreview.product_image}
-                          alt={showProductPreview.product_name}
-                          className="w-full h-64 object-contain bg-gray-50 rounded-lg"
-                        />
-                      </div>
-                    )}
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Product Name</label>
-                        <p className="text-lg font-semibold text-gray-900">{showProductPreview.product_name}</p>
-                      </div>
-                      
-                      {showProductPreview.product_description && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Description</label>
-                          <p className="text-gray-600">{showProductPreview.product_description}</p>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <label className="text-sm font-medium text-gray-700">Status</label>
-                        <p className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                          showProductPreview.is_active ? 'bg-[#d4a574]/10 text-[#b8956a]' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {showProductPreview.is_active ? 'Active' : 'Inactive'}
-                        </p>
-                      </div>
-                      
-                      {showProductPreview.product_link && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Product Link</label>
-                          <a
-                            href={showProductPreview.product_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-purple-600 hover:text-purple-800 break-all"
-                          >
-                            {showProductPreview.product_link}
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mt-6 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={() => {
-                          setShowProductPreview(null)
-                          setEditingProduct(showProductPreview)
-                          setShowAddForm(true)
-                        }}
-                        className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                      >
-                        Edit Product
-                      </button>
-                      <button
-                        onClick={() => setShowProductPreview(null)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Rating Configuration Tab */}
+      {activeTab === 'rating-config' && (
+        <RatingConfigTab
+          ratingConfig={ratingConfig}
+          onConfigChange={setRatingConfig}
+          onSave={() => saveRatingConfigMutation.mutate(ratingConfig)}
+          isSaving={saveRatingConfigMutation.isPending}
+        />
       )}
 
       {/* Reports Tab */}
@@ -1516,6 +1314,1046 @@ export default function HairPage() {
   )
 }
 
+// ==================== COMPONENTS ====================
+
+// Parameters Tab Component
+function ParametersTab({
+  parameters,
+  isLoading,
+  editingParameter,
+  showParameterForm,
+  onEdit,
+  onAdd,
+  onClose,
+  onSuccess,
+  onDelete,
+  onToggleActive,
+  onMoveUp,
+  onMoveDown,
+  sensors,
+}: {
+  parameters: Parameter[]
+  isLoading: boolean
+  editingParameter: Parameter | null
+  showParameterForm: boolean
+  onEdit: (p: Parameter) => void
+  onAdd: () => void
+  onClose: () => void
+  onSuccess: () => void
+  onDelete: (id: string) => void
+  onToggleActive: (id: string, isActive: boolean) => void
+  onMoveUp: (index: number) => void
+  onMoveDown: (index: number) => void
+  sensors: any
+}) {
+  const queryClient = useQueryClient()
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('hair_analysis_parameters').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hair-parameters'] })
+      toast.success('Parameter deleted successfully')
+    },
+  })
+
+  if (isLoading) {
+    return <div className="text-center py-12">Loading parameters...</div>
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Hair Analysis Parameters</h2>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Add Parameter
+        </button>
+      </div>
+
+      {showParameterForm && (
+        <ParameterForm
+          parameter={editingParameter}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
+      )}
+
+      {parameters.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-12 text-center">
+          <Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 mb-4">No parameters configured yet</p>
+          <button
+            onClick={onAdd}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            Add First Parameter
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(event: DragEndEvent) => {
+              const { active, over } = event
+              if (over && active.id !== over.id && parameters) {
+                const oldIndex = parameters.findIndex((p) => p.id === active.id)
+                const newIndex = parameters.findIndex((p) => p.id === over.id)
+                if (oldIndex !== -1 && newIndex !== -1) {
+                  const reorderedParameters = arrayMove(parameters, oldIndex, newIndex)
+                  const updatePromises = reorderedParameters.map((p, idx) => {
+                    const newOrder = idx + 1
+                    return supabase
+                      .from('hair_analysis_parameters')
+                      .update({ display_order: newOrder })
+                      .eq('id', p.id)
+                  })
+                  Promise.all(updatePromises)
+                    .then(() => {
+                      queryClient.invalidateQueries({ queryKey: ['hair-parameters'] })
+                      toast.success('Parameters reordered successfully')
+                    })
+                    .catch((error) => {
+                      console.error('Error reordering parameters:', error)
+                      toast.error('Failed to reorder parameters')
+                    })
+                }
+              }
+            }}
+          >
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parameter Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <SortableContext items={parameters.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {parameters.map((parameter, index) => (
+                    <SortableParameterRow
+                      key={parameter.id}
+                      parameter={parameter}
+                      index={index}
+                      onEdit={onEdit}
+                      onDelete={(id) => {
+                        if (confirm('Are you sure you want to delete this parameter?')) {
+                          deleteMutation.mutate(id)
+                        }
+                      }}
+                      onToggleActive={onToggleActive}
+                      onMoveUp={onMoveUp}
+                      onMoveDown={onMoveDown}
+                      totalParameters={parameters.length}
+                    />
+                  ))}
+                </tbody>
+              </SortableContext>
+            </table>
+          </DndContext>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Sortable Parameter Row
+interface SortableParameterRowProps {
+  parameter: Parameter
+  index: number
+  onEdit: (p: Parameter) => void
+  onDelete: (id: string) => void
+  onToggleActive: (id: string, isActive: boolean) => void
+  onMoveUp: (index: number) => void
+  onMoveDown: (index: number) => void
+  totalParameters: number
+}
+
+function SortableParameterRow({
+  parameter,
+  index,
+  onEdit,
+  onDelete,
+  onToggleActive,
+  onMoveUp,
+  onMoveDown,
+  totalParameters,
+}: SortableParameterRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: parameter.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`${!parameter.is_active ? 'opacity-50' : ''} ${isDragging ? 'bg-blue-50' : ''}`}
+    >
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex items-center gap-2">
+          <button
+            {...attributes}
+            {...listeners}
+            className="p-1 hover:bg-gray-100 rounded cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+            title="Drag to reorder"
+          >
+            <GripVertical className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onMoveUp(index)}
+              disabled={index === 0}
+              className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 transition-colors"
+              title="Move up"
+            >
+              <ArrowUp className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-gray-900 min-w-[2rem] text-center">
+              {parameter.display_order}
+            </span>
+            <button
+              onClick={() => onMoveDown(index)}
+              disabled={index === totalParameters - 1}
+              className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 transition-colors"
+              title="Move down"
+            >
+              <ArrowDown className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        <div className="text-sm font-medium text-gray-900">{parameter.parameter_name}</div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{parameter.category}</td>
+      <td className="px-6 py-4">
+        <div className="text-sm text-gray-500 max-w-md truncate">
+          {parameter.parameter_description || '-'}
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <button
+          onClick={() => onToggleActive(parameter.id, parameter.is_active)}
+          className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+            parameter.is_active ? 'bg-[#d4a574]/10 text-[#b8956a]' : 'bg-gray-100 text-gray-800'
+          }`}
+        >
+          {parameter.is_active ? 'Active' : 'Inactive'}
+        </button>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+        <div className="flex items-center gap-2">
+          <button onClick={() => onEdit(parameter)} className="text-blue-600 hover:text-blue-900 transition-colors">
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onDelete(parameter.id)}
+            className="text-red-600 hover:text-red-900 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// Parameter Form Component
+function ParameterForm({
+  parameter,
+  onClose,
+  onSuccess,
+}: {
+  parameter: Parameter | null
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [formData, setFormData] = useState({
+    parameter_name: parameter?.parameter_name || '',
+    parameter_description: parameter?.parameter_description || '',
+    category: parameter?.category || 'concern',
+    ai_detection_instructions: parameter?.ai_detection_instructions || '',
+    display_order: parameter?.display_order || 0,
+    is_active: parameter?.is_active ?? true,
+    severity_levels: parameter?.severity_levels?.join(', ') || 'High, Medium, Low',
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const dataToSave = {
+        ...formData,
+        severity_levels: formData.severity_levels.split(',').map((s) => s.trim()),
+      }
+
+      if (parameter) {
+        const { error } = await supabase
+          .from('hair_analysis_parameters')
+          .update(dataToSave)
+          .eq('id', parameter.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('hair_analysis_parameters').insert([dataToSave])
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success(parameter ? 'Parameter updated' : 'Parameter created')
+      onSuccess()
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to save parameter')
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4">{parameter ? 'Edit Parameter' : 'Add Parameter'}</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Parameter Name *</label>
+            <input
+              type="text"
+              value={formData.parameter_name}
+              onChange={(e) => setFormData({ ...formData, parameter_name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="e.g., Dandruff, Frizzy Hair"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={formData.parameter_description}
+              onChange={(e) => setFormData({ ...formData, parameter_description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              rows={3}
+              placeholder="Describe what this parameter measures"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="concern">Concern</option>
+                <option value="texture">Texture</option>
+                <option value="condition">Condition</option>
+                <option value="type">Type</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
+              <input
+                type="number"
+                value={formData.display_order}
+                onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">AI Detection Instructions *</label>
+            <textarea
+              value={formData.ai_detection_instructions}
+              onChange={(e) => setFormData({ ...formData, ai_detection_instructions: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              rows={4}
+              placeholder="Instructions for AI on how to detect this parameter in photos."
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              These instructions help the AI analyze photos and determine parameter severity
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Severity Levels (comma-separated)</label>
+            <input
+              type="text"
+              value={formData.severity_levels}
+              onChange={(e) => setFormData({ ...formData, severity_levels: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="High, Medium, Low"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={formData.is_active}
+                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-700">Active</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !formData.parameter_name || !formData.ai_detection_instructions}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+          >
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Products Tab Component - simplified version
+function ProductsTab({
+  parameters,
+  products,
+  isLoading,
+  selectedParameter,
+  selectedSeverity,
+  severityLevels,
+  currentParameter,
+  editingProduct,
+  showProductForm,
+  productsViewMode,
+  onViewModeChange,
+  onParameterChange,
+  onSeverityChange,
+  onEdit,
+  onAdd,
+  onClose,
+  onSuccess,
+  showBulkImageExtractor,
+  onBulkImageExtractorOpen,
+  onBulkImageExtractorClose,
+}: {
+  parameters: Parameter[]
+  products: Product[]
+  isLoading: boolean
+  selectedParameter: string | null
+  selectedSeverity: string | null
+  severityLevels: string[]
+  currentParameter: Parameter | undefined
+  editingProduct: Product | null
+  showProductForm: boolean
+  productsViewMode: 'filtered' | 'all'
+  onViewModeChange: (mode: 'filtered' | 'all') => void
+  onParameterChange: (paramId: string) => void
+  onSeverityChange: (severity: string) => void
+  onEdit: (p: Product) => void
+  onAdd: () => void
+  onClose: () => void
+  onSuccess: () => void
+  showBulkImageExtractor: boolean
+  onBulkImageExtractorOpen: () => void
+  onBulkImageExtractorClose: () => void
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Product Suggestions</h2>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-300 p-1">
+            <button
+              onClick={() => onViewModeChange('filtered')}
+              className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                productsViewMode === 'filtered'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Filtered
+            </button>
+            <button
+              onClick={() => onViewModeChange('all')}
+              className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                productsViewMode === 'all'
+                  ? 'bg-purple-600 text-white'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              All Products
+            </button>
+          </div>
+          <button
+            onClick={onBulkImageExtractorOpen}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Upload className="w-5 h-5" />
+            Extract Images from PDF
+          </button>
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            Add Product
+          </button>
+        </div>
+      </div>
+
+      {showProductForm && (
+        <ProductForm
+          product={editingProduct}
+          parameters={parameters}
+          initialParameterId={selectedParameter}
+          initialSeverityLevel={selectedSeverity}
+          onClose={onClose}
+          onSuccess={onSuccess}
+        />
+      )}
+
+      {productsViewMode === 'filtered' && (
+        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Parameter</label>
+              <select
+                value={selectedParameter || ''}
+                onChange={(e) => onParameterChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Select Parameter</option>
+                {parameters.map((param) => (
+                  <option key={param.id} value={param.id}>
+                    {param.parameter_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Severity Level</label>
+              <select
+                value={selectedSeverity || ''}
+                onChange={(e) => onSeverityChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                disabled={!selectedParameter}
+              >
+                <option value="">Select Severity</option>
+                {severityLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="text-center py-12">Loading products...</div>
+      ) : products.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-12 text-center">
+          <ShoppingBag className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 mb-4">
+            {productsViewMode === 'filtered' && (!selectedParameter || !selectedSeverity)
+              ? 'Please select a parameter and severity level to view products'
+              : 'No products configured yet'}
+          </p>
+          <button
+            onClick={onAdd}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            Add First Product
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parameter</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {products.map((product) => {
+                const param = parameters.find((p) => p.id === product.parameter_id)
+                return (
+                  <tr key={product.id} className={!product.is_active ? 'opacity-50' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.display_order}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{product.product_name}</div>
+                      {product.product_description && (
+                        <div className="text-xs text-gray-500 mt-1 max-w-md truncate">
+                          {product.product_description}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {param?.parameter_name || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {product.severity_level}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        product.is_active ? 'bg-[#d4a574]/10 text-[#b8956a]' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {product.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => onEdit(product)} className="text-blue-600 hover:text-blue-900">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Are you sure you want to delete this product?')) {
+                              // Delete mutation will be handled in parent
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Product Form Component
+function ProductForm({
+  product,
+  parameters,
+  initialParameterId,
+  initialSeverityLevel,
+  onClose,
+  onSuccess,
+}: {
+  product: Product | null
+  parameters: Parameter[]
+  initialParameterId: string | null
+  initialSeverityLevel: string | null
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [selectedParameterId, setSelectedParameterId] = useState<string>(
+    product?.parameter_id || initialParameterId || ''
+  )
+  const [selectedSeverityLevel, setSelectedSeverityLevel] = useState<string>(
+    product?.severity_level || initialSeverityLevel || ''
+  )
+
+  const selectedParameter = parameters.find(p => p.id === selectedParameterId)
+  const severityLevels = selectedParameter?.severity_levels || ['High', 'Medium', 'Low']
+
+  useEffect(() => {
+    if (selectedParameterId && !selectedSeverityLevel && severityLevels.length > 0) {
+      setSelectedSeverityLevel(severityLevels[0])
+    }
+  }, [selectedParameterId, severityLevels, selectedSeverityLevel])
+
+  const [formData, setFormData] = useState({
+    product_name: product?.product_name || '',
+    product_description: product?.product_description || '',
+    product_link: product?.product_link || '',
+    product_image: product?.product_image || '',
+    display_order: product?.display_order || 0,
+    is_active: product?.is_active ?? true,
+  })
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(product?.product_image || null)
+  const [uploading, setUploading] = useState(false)
+
+  useEffect(() => {
+    if (product?.product_image) {
+      setImagePreview(product.product_image)
+    }
+  }, [product])
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file')
+        return
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size must be less than 5MB')
+        return
+      }
+      setSelectedFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      let imageUrl = formData.product_image
+
+      if (selectedFile) {
+        setUploading(true)
+        try {
+          const fileExt = selectedFile.name.split('.').pop()
+          const fileName = `product-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+          const filePath = `product-images/${fileName}`
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('app-images')
+            .upload(filePath, selectedFile)
+
+          if (uploadError) {
+            if (uploadError.message?.includes('Bucket not found')) {
+              throw new Error('Storage bucket "app-images" not found. Please create it in Supabase Dashboard > Storage.')
+            }
+            throw uploadError
+          }
+
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from('app-images').getPublicUrl(filePath)
+          imageUrl = publicUrl
+        } catch (error: any) {
+          throw new Error(error.message || 'Failed to upload image')
+        } finally {
+          setUploading(false)
+        }
+      }
+
+      if (!selectedParameterId || !selectedSeverityLevel) {
+        throw new Error('Please select a parameter and severity level')
+      }
+
+      const dataToSave = {
+        ...formData,
+        product_image: imageUrl,
+        parameter_id: selectedParameterId,
+        severity_level: selectedSeverityLevel,
+      }
+
+      if (product) {
+        const { error } = await supabase
+          .from('hair_parameter_products')
+          .update(dataToSave)
+          .eq('id', product.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('hair_parameter_products').insert([dataToSave])
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success(product ? 'Product updated' : 'Product created')
+      onSuccess()
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to save product')
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4">{product ? 'Edit Product' : 'Add Product'}</h2>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Parameter *</label>
+              <select
+                value={selectedParameterId}
+                onChange={(e) => setSelectedParameterId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="">Select Parameter</option>
+                {parameters.map((param) => (
+                  <option key={param.id} value={param.id}>
+                    {param.parameter_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Severity Level *</label>
+              <select
+                value={selectedSeverityLevel}
+                onChange={(e) => setSelectedSeverityLevel(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                disabled={!selectedParameterId}
+              >
+                <option value="">Select Severity</option>
+                {severityLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
+            <input
+              type="text"
+              value={formData.product_name}
+              onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={formData.product_description}
+              onChange={(e) => setFormData({ ...formData, product_description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              rows={3}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Product Link</label>
+              <input
+                type="url"
+                value={formData.product_link}
+                onChange={(e) => setFormData({ ...formData, product_link: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+              <input
+                type="url"
+                value={formData.product_image}
+                onChange={(e) => setFormData({ ...formData, product_image: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="https://..."
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Upload Image</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+            {imagePreview && (
+              <div className="mt-2">
+                <img src={imagePreview} alt="Preview" className="w-32 h-32 object-cover rounded" />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Display Order</label>
+            <input
+              type="number"
+              value={formData.display_order}
+              onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={formData.is_active}
+                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-700">Active</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !formData.product_name || !selectedParameterId || !selectedSeverityLevel}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+          >
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Rating Config Tab Component
+function RatingConfigTab({
+  ratingConfig,
+  onConfigChange,
+  onSave,
+  isSaving,
+}: {
+  ratingConfig: RatingConfig
+  onConfigChange: (config: RatingConfig) => void
+  onSave: () => void
+  isSaving: boolean
+}) {
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Rating Configuration</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Configure the rating ranges for hair analysis parameters
+        </p>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Low Range</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Min</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.low_min}
+                  onChange={(e) => onConfigChange({ ...ratingConfig, low_min: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Max</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.low_max}
+                  onChange={(e) => onConfigChange({ ...ratingConfig, low_max: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Medium Range</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Min</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.medium_min}
+                  onChange={(e) => onConfigChange({ ...ratingConfig, medium_min: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Max</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.medium_max}
+                  onChange={(e) => onConfigChange({ ...ratingConfig, medium_max: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">High Range</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Min</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.high_min}
+                  onChange={(e) => onConfigChange({ ...ratingConfig, high_min: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Max</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={ratingConfig.high_max}
+                  onChange={(e) => onConfigChange({ ...ratingConfig, high_max: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onSave}
+            disabled={isSaving}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+          >
+            {isSaving ? 'Saving...' : 'Save Configuration'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// HairQuestionForm Component
 function HairQuestionForm({
   question,
   onClose,
@@ -1885,8 +2723,20 @@ function HairReportDetailsModal({
   onClose: () => void
 }) {
   const report = analysis.analysis_result
-  const overallHealth = report?.hair_analysis?.["Overall Hair Health"]
-  const severity = overallHealth?.severity || 'N/A'
+  
+  // Try multiple possible structures for the report data
+  // Structure 1: Direct hair_analysis (from AI response)
+  const hairAnalysis = report?.hair_analysis || report?.result?.hair_analysis
+  const overallHealth = hairAnalysis?.["Overall Hair Health"]
+  
+  // Structure 2: Converted AnalysisResult format (from HairAnalysisPage)
+  const result = report?.result
+  const parameters = result?.parameters || []
+  const summary = result?.summary || report?.summary
+  const overallSeverity = result?.overallSeverity || report?.overallSeverity || overallHealth?.severity || 'N/A'
+  
+  // Get images from various possible locations
+  const images = report?.faceImages || report?.result?.faceImages || []
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1911,27 +2761,35 @@ function HairReportDetailsModal({
                 {new Date(analysis.created_at).toLocaleString()}
               </span>
               <span className={`px-3 py-1 rounded text-sm font-medium ${
-                severity === 'Mild' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
-                severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                severity === 'Severe' ? 'bg-red-100 text-red-800' :
+                overallSeverity === 'Mild' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
+                overallSeverity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                overallSeverity === 'Severe' ? 'bg-red-100 text-red-800' :
                 'bg-gray-100 text-gray-800'
               }`}>
-                {severity}
+                {overallSeverity}
               </span>
             </div>
           </div>
 
+          {/* Summary */}
+          {summary && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Summary</h3>
+              <p className="text-gray-600">{summary}</p>
+            </div>
+          )}
+
           {/* Analysis Images */}
-          {report?.faceImages && report.faceImages.length > 0 && (
+          {images && images.length > 0 && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Analysis Images</h3>
-              <div className={`grid grid-cols-1 ${report.faceImages.length === 1 ? 'sm:grid-cols-1 max-w-md mx-auto' : report.faceImages.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-4`}>
-                {report.faceImages.map((image: string, index: number) => (
+              <div className={`grid grid-cols-1 ${images.length === 1 ? 'sm:grid-cols-1 max-w-md mx-auto' : images.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-4`}>
+                {images.map((image: string, index: number) => (
                   <div key={index} className="text-center">
                     <img 
                       src={image} 
                       alt={['Front Face', 'Right Side', 'Left Side'][index] || `Image ${index + 1}`} 
-                      className="rounded-lg shadow-sm border border-gray-100-md border border-gray-200 aspect-square object-cover w-full" 
+                      className="rounded-lg shadow-sm border border-gray-200 aspect-square object-cover w-full" 
                       onError={(e) => {
                         console.error('Image failed to load:', image);
                         (e.target as HTMLImageElement).style.display = 'none';
@@ -1946,6 +2804,7 @@ function HairReportDetailsModal({
             </div>
           )}
 
+          {/* Overall Hair Health */}
           {overallHealth && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Overall Hair Health</h3>
@@ -1958,52 +2817,153 @@ function HairReportDetailsModal({
             </div>
           )}
 
-          {report?.hair_analysis && (
+          {/* Detailed Analysis - Show configured parameters */}
+          {(hairAnalysis || parameters.length > 0) && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Detailed Analysis</h3>
               <div className="space-y-3">
-                {Object.entries(report.hair_analysis).map(([key, value]: [string, any]) => {
-                  if (key === "Overall Hair Health" || key === "6. Recommendations for Improvement") return null
+                {/* Map AI analysis results to configured parameters */}
+                {(() => {
+                  const potentialIssues = hairAnalysis?.["4. Potential Issues"]
+                  const scalpHealth = hairAnalysis?.["2. Scalp Health and Condition"]
+                  const hairTexture = hairAnalysis?.["3. Hair Texture and Quality"]
                   
-                  return (
-                    <div key={key} className="border border-gray-200 rounded-lg p-4">
+                  // Define the configured parameters and map them to AI analysis data
+                  const configuredParameters = [
+                    {
+                      name: 'Dandruff',
+                      description: 'Presence of white or yellowish flakes on the scalp and hair',
+                      data: potentialIssues?.dandruff,
+                      severity: potentialIssues?.severity,
+                      rating: potentialIssues?.rating,
+                      notes: potentialIssues?.notes
+                    },
+                    {
+                      name: 'Frizzy Hair',
+                      description: 'Hair that appears unruly, lacks smoothness, and has flyaway strands',
+                      data: hairTexture ? `${hairTexture.texture || ''} ${hairTexture.quality || ''}`.trim() : null,
+                      severity: hairTexture?.severity,
+                      rating: hairTexture?.rating,
+                      notes: hairTexture?.notes
+                    },
+                    {
+                      name: 'Dry and Damaged Scalp',
+                      description: 'Scalp showing signs of dryness, flakiness, tightness, or damage',
+                      data: scalpHealth?.dryness_or_oiliness || potentialIssues?.damage,
+                      severity: scalpHealth?.severity || potentialIssues?.severity,
+                      rating: scalpHealth?.rating || potentialIssues?.rating,
+                      notes: scalpHealth?.notes || potentialIssues?.notes
+                    },
+                    {
+                      name: 'Oily Scalp',
+                      description: 'Excessive oil production on the scalp making hair appear greasy',
+                      data: scalpHealth?.dryness_or_oiliness,
+                      severity: scalpHealth?.severity,
+                      rating: scalpHealth?.rating,
+                      notes: scalpHealth?.notes
+                    },
+                    {
+                      name: 'Itchy Scalp',
+                      description: 'Scalp discomfort characterized by itching sensation',
+                      data: scalpHealth?.redness_or_irritation,
+                      severity: scalpHealth?.severity,
+                      rating: scalpHealth?.rating,
+                      notes: scalpHealth?.notes
+                    }
+                  ]
+                  
+                  return configuredParameters.map((param, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-gray-900">{key}</h4>
-                        {value.severity && (
+                        <h4 className="font-medium text-gray-900">{param.name}</h4>
+                        {param.severity && (
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            value.severity === 'Mild' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
-                            value.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                            value.severity === 'Severe' ? 'bg-red-100 text-red-800' :
+                            param.severity === 'Mild' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
+                            param.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                            param.severity === 'Severe' ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {value.severity}
+                            {param.severity}
                           </span>
                         )}
                       </div>
-                      {value.description && (
-                        <p className="text-sm text-gray-600">{value.description}</p>
+                      <p className="text-xs text-gray-500 mb-2 italic">{param.description}</p>
+                      {param.rating && (
+                        <p className="text-xs text-gray-500 mb-2">Rating: {param.rating}/10</p>
                       )}
-                      {value.rating && (
-                        <p className="text-xs text-gray-500 mt-1">Rating: {value.rating}/10</p>
+                      {param.data && (
+                        <p className="text-sm text-gray-600 mb-2">{param.data}</p>
+                      )}
+                      {param.notes && (
+                        <p className="text-xs text-gray-500 italic">Notes: {param.notes}</p>
                       )}
                     </div>
-                  )
-                })}
+                  ))
+                })()}
               </div>
             </div>
           )}
 
-          {report?.hair_analysis?.["6. Recommendations for Improvement"] && (
+          {/* Recommendations */}
+          {hairAnalysis?.["6. Recommendations for Improvement"] && (
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Recommendations</h3>
               <div className="space-y-2">
-                {Object.entries(report.hair_analysis["6. Recommendations for Improvement"]).map(([key, value]: [string, any]) => (
-                  <div key={key} className="border-l-4 border-purple-500 pl-4">
-                    <h4 className="font-medium text-gray-900 capitalize">{key.replace(/_/g, ' ')}</h4>
-                    <p className="text-sm text-gray-600">{value}</p>
+                {Object.entries(hairAnalysis["6. Recommendations for Improvement"]).map(([key, value]: [string, any]) => {
+                  if (key === 'rating' || key === 'severity' || key === 'notes') return null
+                  return (
+                    <div key={key} className="border-l-4 border-purple-500 pl-4">
+                      <h4 className="font-medium text-gray-900 capitalize">{key.replace(/_/g, ' ')}</h4>
+                      <p className="text-sm text-gray-600">{value}</p>
+                    </div>
+                  )
+                })}
+                {hairAnalysis["6. Recommendations for Improvement"].notes && (
+                  <div className="border-l-4 border-purple-500 pl-4">
+                    <h4 className="font-medium text-gray-900">General Notes</h4>
+                    <p className="text-sm text-gray-600">{hairAnalysis["6. Recommendations for Improvement"].notes}</p>
                   </div>
-                ))}
+                )}
               </div>
+            </div>
+          )}
+
+          {/* Routine Recommendations (from converted format) */}
+          {result?.routine && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recommended Routines</h3>
+              {result.routine.morning && result.routine.morning.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="font-medium text-gray-900 mb-2">Morning Routine</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    {result.routine.morning.map((routine: string, idx: number) => (
+                      <li key={idx} className="text-sm text-gray-600">{routine}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {result.routine.evening && result.routine.evening.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Evening Routine</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    {result.routine.evening.map((routine: string, idx: number) => (
+                      <li key={idx} className="text-sm text-gray-600">{routine}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Debug info (only in development) */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-6 p-4 bg-gray-100 rounded-lg">
+              <details>
+                <summary className="cursor-pointer text-sm font-medium text-gray-700">Debug: View Raw Report Data</summary>
+                <pre className="mt-2 text-xs overflow-auto max-h-64 bg-white p-2 rounded border">
+                  {JSON.stringify(report, null, 2)}
+                </pre>
+              </details>
             </div>
           )}
         </div>
@@ -2020,6 +2980,7 @@ function HairReportDetailsModal({
     </div>
   )
 }
+
 
 
 

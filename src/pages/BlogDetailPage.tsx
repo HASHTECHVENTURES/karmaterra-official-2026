@@ -20,10 +20,15 @@ const BlogDetailPage = () => {
           .from('blog_posts')
           .select('*')
           .eq('id', id)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('Error fetching blog post:', error);
+          setPost(null);
+        } else if (!data) {
+          // Blog not found
+          console.error('Blog post not found');
+          setPost(null);
         } else {
           setPost(data);
           // If external link exists, redirect immediately
@@ -33,6 +38,7 @@ const BlogDetailPage = () => {
         }
       } catch (error) {
         console.error('Error:', error);
+        setPost(null);
       } finally {
         setLoading(false);
       }

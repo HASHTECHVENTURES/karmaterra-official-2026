@@ -237,10 +237,10 @@ Scenario A: User reports "Dark Spots" but image shows minimal visible spots
 - Description: "Visual analysis shows minimal dark spots (rating 3/10). However, you've identified dark spots as a primary concern. Possible explanations: (1) Hyperpigmentation may be subtle and not fully captured in standard lighting, (2) Previous treatments (${treatment}) may have faded visible marks, (3) Spots may be more apparent under UV light or in natural sunlight. Based on your concern AND lifestyle factors (sunscreen usage: ${sunscreen}), I recommend: Vitamin C serum in morning, niacinamide in evening, daily broad-spectrum sunscreen, and quarterly dermatologist consultation."
 - Adjusted rating: 5/10 (acknowledging user experience while respecting visual evidence)
 
-Scenario B: Image shows significant "Lines & Wrinkles" but user didn't report it
-- Visual rating: 7/10 (moderate-visible wrinkles)
+Scenario B: Image shows significant "Crow's Feet" but user didn't report it
+- Visual rating: 7/10 (moderate-visible crow's feet)
 - User concern: NOT explicitly reported
-- Description: "Visual analysis detects moderate lines and wrinkles (rating 7/10), particularly around [specific areas]. While this wasn't listed in your primary concerns, it's visible in the analysis. Given your age (${userData.age}) and [lifestyle factors], I recommend preventative anti-aging routine: Retinol at night, peptide serums, and increased hydration."
+- Description: "Visual analysis detects moderate crow's feet (rating 7/10), particularly around the outer corners of the eyes. While this wasn't listed in your primary concerns, it's visible in the analysis. Given your age (${userData.age}) and [lifestyle factors], I recommend preventative anti-aging routine: Retinol at night, peptide serums, eye creams with peptides, and increased hydration."
 
 Scenario C: Image and user report AGREE on concern
 - Visual rating: 8/10 (severe visible)
@@ -280,16 +280,51 @@ Scenario C: Image and user report AGREE on concern
     const analysis = JSON.parse(maybeJson) as AnalysisResult;
     
     // Ensure all parameters are present, adding placeholders if Gemini omits any
+    // Use flexible matching to handle variations in naming (e.g., apostrophes, case differences)
+    const normalizeParamName = (name: string): string => {
+      return name.toLowerCase().replace(/'/g, '').replace(/\s+/g, ' ').trim();
+    };
+    
     const completeParameters: AnalysisParameter[] = SKIN_PARAMETERS.map(paramName => {
-        const foundParam = analysis.parameters.find(p => p.category === paramName);
-        if (foundParam) {
-            return foundParam;
+        // Try exact match first
+        let foundParam = analysis.parameters.find(p => p.category === paramName);
+        
+        // If not found, try normalized matching (handles apostrophes, case differences)
+        if (!foundParam) {
+          const normalizedTarget = normalizeParamName(paramName);
+          foundParam = analysis.parameters.find(p => {
+            const normalizedCategory = normalizeParamName(p.category);
+            return normalizedCategory === normalizedTarget;
+          });
         }
+        
+        // If still not found, try partial matching (e.g., "Crow's Feet" vs "Crows Feet")
+        if (!foundParam) {
+          const targetWords = normalizeParamName(paramName).split(' ');
+          foundParam = analysis.parameters.find(p => {
+            const categoryWords = normalizeParamName(p.category).split(' ');
+            return targetWords.every(word => categoryWords.some(catWord => catWord.includes(word) || word.includes(catWord)));
+          });
+        }
+        
+        if (foundParam) {
+            // Ensure the category name matches exactly what we expect
+            return {
+                ...foundParam,
+                category: paramName
+            };
+        }
+        
+        // If parameter was in user's primary concerns, give it more attention even if not visible
+        const isUserConcern = primaryConcern.toLowerCase().includes(normalizeParamName(paramName));
+        
         return {
             category: paramName,
-            rating: 1,
-            severity: 'N/A',
-            description: 'No significant concerns detected in this area.'
+            rating: isUserConcern ? 5 : 1, // Higher default if user reported it
+            severity: isUserConcern ? 'Medium' : 'N/A',
+            description: isUserConcern 
+              ? `User reported "${paramName}" as a primary concern. Visual analysis did not detect significant signs of this condition in the provided images. This could be due to: (1) early-stage condition not yet visible, (2) subtle presentation not captured in standard lighting, (3) condition more apparent under different conditions, or (4) image quality limitations. Recommendation: Monitor this area and consider preventative care.`
+              : 'No significant concerns detected in this area.'
         };
     });
 

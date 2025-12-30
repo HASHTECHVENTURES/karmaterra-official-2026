@@ -220,15 +220,29 @@ const demographicQuestions = [
 
 const Questionnaire = ({ onComplete, onBack, userProfile, existingAnswers }: QuestionnaireProps) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState<Partial<QuestionnaireAnswers>>(existingAnswers || {});
+  const [answers, setAnswers] = useState<Partial<QuestionnaireAnswers>>(() => {
+    // Initialize with existingAnswers if available
+    if (existingAnswers && Object.keys(existingAnswers).length > 0) {
+      console.log('📋 Questionnaire: Initializing with existing answers:', existingAnswers);
+      console.log('📋 Questionnaire: primarySkinConcern in initial state:', existingAnswers.primarySkinConcern);
+      // Deep clone to ensure React detects the change
+      return { ...existingAnswers };
+    }
+    console.log('📋 Questionnaire: No existing answers, starting with empty object');
+    return {};
+  });
 
   // Keep local answers in sync when existingAnswers arrive/changes
   useEffect(() => {
-    if (existingAnswers) {
+    if (existingAnswers && Object.keys(existingAnswers).length > 0) {
       // Only set answers if existingAnswers is provided (has actual data)
-      setAnswers(existingAnswers);
+      console.log('📋 Questionnaire: Loading existing answers:', existingAnswers);
+      console.log('📋 Questionnaire: primarySkinConcern in existingAnswers:', existingAnswers.primarySkinConcern);
+      // Deep clone to ensure React detects the change
+      setAnswers({ ...existingAnswers });
     } else {
       // Clear answers when existingAnswers is null/undefined (new user)
+      console.log('📋 Questionnaire: No existing answers, starting fresh');
       setAnswers({});
     }
   }, [existingAnswers]);
@@ -311,7 +325,21 @@ const Questionnaire = ({ onComplete, onBack, userProfile, existingAnswers }: Que
   }, [allQuestions.length, hasMissingData, missingData]);
 
   const currentQuestion = allQuestions[currentStep];
-  const isMultipleSelect = (currentQuestion as any).multiple === true;
+  const isMultipleSelect = (currentQuestion as any)?.multiple === true;
+
+  // Debug: Log current answers state (moved after currentQuestion is defined)
+  useEffect(() => {
+    if (currentQuestion) {
+      console.log('📋 Questionnaire: Current answers state:', answers);
+      console.log('📋 Questionnaire: Current question ID:', currentQuestion.id);
+      const currentAnswer = answers[currentQuestion.id as keyof QuestionnaireAnswers];
+      console.log('📋 Questionnaire: Answer for current question:', currentAnswer);
+      if (currentQuestion.id === 'primarySkinConcern') {
+        console.log('📋 Questionnaire: primarySkinConcern is array:', Array.isArray(currentAnswer));
+        console.log('📋 Questionnaire: primarySkinConcern value:', currentAnswer);
+      }
+    }
+  }, [answers, currentQuestion, currentStep]);
 
   const handleAnswer = (answer: string) => {
     if (isMultipleSelect) {

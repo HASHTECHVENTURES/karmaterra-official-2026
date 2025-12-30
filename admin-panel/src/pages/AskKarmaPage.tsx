@@ -48,48 +48,67 @@ export default function AskKarmaPage() {
   const { data: conversations, isLoading } = useQuery({
     queryKey: ['ask-karma-conversations', searchTerm],
     queryFn: async () => {
+      // Build query with joins - search will be applied after fetching if needed
       let query = supabase
         .from('conversations')
-        .select('*')
+        .select(`
+          *,
+          profiles:user_id (
+            full_name,
+            email
+          )
+        `)
         .order('updated_at', { ascending: false })
+
+      // Apply search filter at database level for title (conversation field)
+      if (searchTerm) {
+        query = query.or(`title.ilike.%${searchTerm}%`)
+      }
 
       const { data, error } = await query.limit(100)
 
       if (error) throw error
 
-      // Get user profiles and message counts for each conversation
-      const conversationsWithDetails = await Promise.all(
-        (data || []).map(async (conv: any) => {
-          // Get user profile
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', conv.user_id)
-            .single()
-
-          // Get message count
-          const { count } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-
-          // Filter by search term if provided
-          const matchesSearch = !searchTerm || 
-            conv.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            profile?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-
-          if (!matchesSearch && searchTerm) return null
-
-          return {
-            ...conv,
-            user: profile || null,
-            message_count: count || 0
-          }
+      // Filter by user profile fields if search term provided (after fetching)
+      let filteredData = data || []
+      if (searchTerm) {
+        filteredData = filteredData.filter((conv: any) => {
+          const titleMatch = conv.title?.toLowerCase().includes(searchTerm.toLowerCase())
+          const nameMatch = conv.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+          const emailMatch = conv.profiles?.email?.toLowerCase().includes(searchTerm.toLowerCase())
+          return titleMatch || nameMatch || emailMatch
         })
-      )
+      }
 
-      return conversationsWithDetails.filter(Boolean) as Conversation[]
+      // Get all conversation IDs for batch message count query
+      const conversationIds = filteredData.map((conv: any) => conv.id)
+      let messageCountsMap: Record<string, number> = {}
+      
+      if (conversationIds.length > 0) {
+        // Get message counts for all conversations in a single query
+        const { data: messages, error: messagesError } = await supabase
+          .from('messages')
+          .select('conversation_id')
+          .in('conversation_id', conversationIds)
+        
+        if (messagesError) {
+          console.error('Error fetching message counts:', messagesError)
+        } else {
+          // Count messages per conversation
+          messages?.forEach(msg => {
+            messageCountsMap[msg.conversation_id] = (messageCountsMap[msg.conversation_id] || 0) + 1
+          })
+        }
+      }
+
+      // Map conversations with user profiles and message counts
+      const conversationsWithDetails = filteredData.map((conv: any) => ({
+        ...conv,
+        user: conv.profiles || null,
+        message_count: messageCountsMap[conv.id] || 0
+      }))
+
+      return conversationsWithDetails as Conversation[]
     },
   })
 
@@ -681,6 +700,7 @@ function UploadForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
     </div>
   )
 }
+
 
 
 

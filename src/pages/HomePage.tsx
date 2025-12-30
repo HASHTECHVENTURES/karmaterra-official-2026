@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, Star, Scissors, Leaf, Users, Home, ShoppingBag, User, LogOut, ArrowLeft, MessageSquare, HelpCircle } from "lucide-react";
+import { Menu, Star, Scissors, Leaf, Users, Home, ShoppingBag, User, LogOut, ArrowLeft, MessageSquare, HelpCircle, Share2 } from "lucide-react";
 import { useAuth } from "@/App";
 import { supabase } from "@/lib/supabase";
 import { Browser } from "@capacitor/browser";
@@ -8,6 +8,8 @@ import Notifications from "@/components/Notifications";
 import { getAppImageByName } from "@/services/appImagesService";
 import { SkeletonLoader, CardSkeleton } from "@/components/SkeletonLoader";
 import { ServiceCard } from "@/components/ServiceCard";
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import AppShareModal from "@/components/AppShareModal";
 
 const HomePage = () => {
   const { user, signOut } = useAuth();
@@ -21,6 +23,7 @@ const HomePage = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [appIconUrl, setAppIconUrl] = useState("/app-icon.png");
   const [blogBannerImage, setBlogBannerImage] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Fetch products from Supabase (synced with admin panel)
   useEffect(() => {
@@ -337,63 +340,61 @@ const HomePage = () => {
   const services = useMemo(() => [
     {
       title: "Know Your Skin",
-      icon: !iconErrors.skin && serviceIcons.skin ? (
-        <img 
-          src={serviceIcons.skin} 
-          alt="Know Your Skin" 
-          className="w-8 h-8 object-contain filter invert brightness-150" 
-          loading="lazy"
-          onError={() => setIconErrors(prev => ({ ...prev, skin: true }))}
+      icon: (
+        <DotLottieReact
+          src="https://lottie.host/3f9bb416-9378-433c-9507-011a7c1a5e91/YsnLvnxft9.lottie"
+          loop
+          autoplay
+          style={{ width: '112px', height: '112px' }}
         />
-      ) : (
-        <Scissors className="w-6 h-6" />
       ),
       bgColor: "bg-gradient-to-br from-orange-100 to-orange-200",
-      iconBg: "bg-orange-500",
+      iconBg: "bg-transparent",
       textColor: "text-orange-700",
       onClick: () => navigate("/know-your-skin")
     },
     {
       title: "Know Your Hair",
-      icon: !iconErrors.hair && serviceIcons.hair ? (
-        <img 
-          src={serviceIcons.hair} 
-          alt="Know Your Hair" 
-          className="w-8 h-8 object-contain filter invert brightness-150" 
-          loading="lazy"
-          onError={() => setIconErrors(prev => ({ ...prev, hair: true }))}
+      icon: (
+        <DotLottieReact
+          src="https://lottie.host/5176a27c-9549-4236-84ff-64f81bbe2a5d/esWblj3Iqq.lottie"
+          loop
+          autoplay
+          style={{ width: '112px', height: '112px' }}
         />
-      ) : (
-        <Scissors className="w-6 h-6" />
       ),
       bgColor: "bg-gradient-to-br from-indigo-100 to-indigo-200",
-      iconBg: "bg-indigo-500",
+      iconBg: "bg-transparent",
       textColor: "text-indigo-700",
       onClick: () => navigate("/hair-analysis")
     },
     {
       title: "Ask Karma",
-      icon: <Leaf className="w-6 h-6" />,
+      icon: (
+        <DotLottieReact
+          src="https://lottie.host/c3a918f8-86a4-4eb0-8412-0a9e5844d506/Ep706bq6YC.lottie"
+          loop
+          autoplay
+          style={{ width: '140px', height: '140px' }}
+        />
+      ),
       bgColor: "bg-gradient-to-br from-karma-light-gold to-karma-cream",
-      iconBg: "bg-karma-gold",
+      iconBg: "bg-transparent",
       textColor: "text-karma-brown",
       onClick: () => navigate("/ask-karma")
     },
     {
       title: "Community",
-      icon: !iconErrors.community && serviceIcons.community ? (
-        <img 
-          src={serviceIcons.community} 
-          alt="Community" 
-          className="w-8 h-8 object-contain filter invert brightness-150" 
-          loading="lazy"
-          onError={() => setIconErrors(prev => ({ ...prev, community: true }))}
+      icon: (
+        <DotLottieReact
+          src="https://lottie.host/927d39ea-1a63-4307-9955-ef78bde070da/fqLJv00WTG.lottie"
+          loop
+          autoplay
+          style={{ width: '112px', height: '112px' }}
         />
-      ) : (
-        <Users className="w-6 h-6" />
       ),
       bgColor: "bg-gradient-to-br from-teal-100 to-teal-200",
-      iconBg: "bg-teal-500",
+      iconBg: "bg-transparent",
       textColor: "text-teal-700",
       onClick: () => navigate("/community")
     }
@@ -533,7 +534,7 @@ const HomePage = () => {
       {/* Services Section */}
       <div className="px-4 mb-8">
         <h2 className="text-xl font-bold text-gray-800 mb-4">Services</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3">
           {services.map((service, index) => (
             <ServiceCard
               key={index}
@@ -699,6 +700,18 @@ const HomePage = () => {
                 <button 
                   onClick={() => {
                     setIsMenuOpen(false);
+                    setShowShareModal(true);
+                  }}
+                  className="w-full flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-karma-green to-green-600 rounded-lg flex items-center justify-center mr-3 shadow-sm">
+                    <Share2 className="w-4 h-4 text-white" />
+                  </div>
+                  Share App
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsMenuOpen(false);
                     signOut();
                   }}
                   className="w-full flex items-center p-3 text-red-600 hover:bg-red-50 rounded-lg"
@@ -718,6 +731,12 @@ const HomePage = () => {
           </div>
         </div>
       )}
+
+      {/* Share App Modal */}
+      <AppShareModal 
+        isOpen={showShareModal} 
+        onClose={() => setShowShareModal(false)} 
+      />
     </div>
   );
 };

@@ -15,14 +15,12 @@ export const ServiceCard = memo<ServiceCardProps>(({ title, icon, bgColor, iconB
   return (
     <button
       onClick={onClick}
-      className={`${bgColor} rounded-2xl p-6 text-center transition-transform hover:scale-105`}
+      className={`${bgColor} rounded-2xl p-4 text-center transition-transform hover:scale-105 flex flex-col items-center justify-center min-h-[180px] w-full`}
     >
-      <div className={`${iconBg} ${title === "Ask Karma" ? "w-12 h-12" : "w-16 h-16"} rounded-xl flex items-center justify-center mx-auto mb-3`}>
-        <div className="text-white brightness-150">
-          {icon}
-        </div>
+      <div className={`${iconBg === "bg-transparent" ? "" : iconBg} ${title === "Ask Karma" ? "w-36 h-36" : "w-28 h-28"} ${iconBg !== "bg-transparent" ? "rounded-xl" : ""} flex items-center justify-center mb-3 overflow-hidden flex-shrink-0`}>
+        {icon}
       </div>
-      <div className={`${textColor} font-semibold text-sm`}>
+      <div className={`${textColor} font-semibold text-sm mt-auto`}>
         {title}
       </div>
     </button>

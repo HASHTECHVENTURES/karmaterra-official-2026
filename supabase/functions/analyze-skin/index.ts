@@ -15,9 +15,10 @@ const SKIN_PARAMETERS = [
   'Ageing',
   'Dark Spots',
   'Under Eye',
-  'Lines & Wrinkles',
+  'Crow''s Feet',
   'Tan',
-  'Pigmentation'
+  'Pigmentation',
+  'Sebum'
 ]
 
 serve(async (req) => {
@@ -314,10 +315,10 @@ Scenario A: User reports "Dark Spots" but image shows minimal visible spots
 - Description: "Visual analysis shows minimal dark spots (rating 3/10). However, you've identified dark spots as a primary concern. Possible explanations: (1) Hyperpigmentation may be subtle and not fully captured in standard lighting, (2) Previous treatments (${treatment}) may have faded visible marks, (3) Spots may be more apparent under UV light or in natural sunlight. Based on your concern AND lifestyle factors (sunscreen usage: ${sunscreen}), I recommend: Vitamin C serum in morning, niacinamide in evening, daily broad-spectrum sunscreen, and quarterly dermatologist consultation."
 - Adjusted rating: 5/10 (acknowledging user experience while respecting visual evidence)
 
-Scenario B: Image shows significant "Lines & Wrinkles" but user didn't report it
-- Visual rating: 7/10 (moderate-visible wrinkles)
+Scenario B: Image shows significant "Crow's Feet" but user didn't report it
+- Visual rating: 7/10 (moderate-visible crow's feet)
 - User concern: NOT explicitly reported
-- Description: "Visual analysis detects moderate lines and wrinkles (rating 7/10), particularly around [specific areas]. While this wasn't listed in your primary concerns, it's visible in the analysis. Given your age (${safeUserData.age}) and [lifestyle factors], I recommend preventative anti-aging routine: Retinol at night, peptide serums, and increased hydration."
+- Description: "Visual analysis detects moderate crow's feet (rating 7/10), particularly around the outer corners of the eyes. While this wasn't listed in your primary concerns, it's visible in the analysis. Given your age (${safeUserData.age}) and [lifestyle factors], I recommend preventative anti-aging routine: Retinol at night, peptide serums, eye creams with peptides, and increased hydration."
 
 Scenario C: Image and user report AGREE on concern
 - Visual rating: 8/10 (severe visible)

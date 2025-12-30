@@ -249,44 +249,46 @@ export default function SkinPage() {
     },
   })
 
-  // Fetch skin reports
+  // Fetch skin reports - FIXED: Use join to avoid N+1 queries and database-level search
   const { data: reports, isLoading: reportsLoading } = useQuery({
     queryKey: ['skin-reports', searchTerm],
     queryFn: async () => {
+      // Use join to fetch user profiles in single query
       let query = supabase
         .from('analysis_history')
-        .select('*')
+        .select(`
+          *,
+          profiles:user_id (
+            full_name,
+            email
+          )
+        `)
         .eq('analysis_type', 'skin')
         .order('created_at', { ascending: false })
 
+      // Apply search filter at database level if possible
+      // Note: Supabase doesn't support searching joined tables directly, so we'll filter after
       const { data, error } = await query
 
       if (error) throw error
 
-      // Get user profiles for each analysis
-      const reportsWithUsers = await Promise.all(
-        (data || []).map(async (item: any) => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', item.user_id)
-            .single()
-
-          // Filter by search term if provided
-          const matchesSearch = !searchTerm || 
-            profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            profile?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-
-          if (!matchesSearch && searchTerm) return null
-
-          return {
-            ...item,
-            user: profile || null
-          }
+      // Filter by search term if provided (after fetching with join)
+      let filteredData = data || []
+      if (searchTerm) {
+        filteredData = filteredData.filter((item: any) => {
+          const profile = item.profiles
+          return profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                 profile?.email?.toLowerCase().includes(searchTerm.toLowerCase())
         })
-      )
+      }
 
-      return reportsWithUsers.filter(Boolean)
+      // Map to expected format
+      const reportsWithUsers = filteredData.map((item: any) => ({
+        ...item,
+        user: item.profiles || null
+      }))
+
+      return reportsWithUsers
     },
     enabled: activeTab === 'reports',
   })

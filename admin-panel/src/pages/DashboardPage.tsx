@@ -86,13 +86,13 @@ export default function DashboardPage() {
         {statCards.map((stat) => {
           const Icon = stat.icon
           return (
-            <div key={stat.title} className="bg-white rounded-lg shadow-sm border border-gray-100-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+            <div key={stat.title} className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">{stat.title}</p>
                   <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
                 </div>
-                <div className={`${stat.color} p-3 rounded-lg shadow-sm border border-gray-100-sm`}>
+                <div className={`${stat.color} p-3 rounded-lg shadow-sm border border-gray-100`}>
                   <Icon className="w-6 h-6 text-white" />
                 </div>
               </div>
@@ -102,7 +102,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100-sm border border-gray-100 p-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-6">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <a

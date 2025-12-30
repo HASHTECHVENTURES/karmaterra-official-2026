@@ -28,7 +28,7 @@ export default function UsersPage() {
     queryFn: async () => {
       let query = supabase
         .from('profiles')
-        .select('id, full_name, email, phone_number, country, state, city, created_at', { count: 'exact' })
+        .select('id, full_name, email, phone_number, gender, country, state, city, created_at', { count: 'exact' })
         .order('created_at', { ascending: false })
 
       if (searchTerm) {
@@ -78,31 +78,42 @@ export default function UsersPage() {
 
         if (hairError) console.error('Error fetching hair analyses:', hairError)
 
-        // Get ASK KARMA conversations
+        // Get ASK KARMA conversations with message counts in a single query
         const { data: conversationsData, error: conversationsError } = await supabase
           .from('conversations')
-          .select('*, messages(count)')
+          .select(`
+            *,
+            messages(count)
+          `)
           .eq('user_id', selectedUser.id)
           .order('created_at', { ascending: false })
 
         if (conversationsError) console.error('Error fetching conversations:', conversationsError)
 
-        // Get message counts for each conversation
-        const conversationsWithCounts = await Promise.all(
-          (conversationsData || []).map(async (conv) => {
-            const { count, error: countError } = await supabase
-              .from('messages')
-              .select('*', { count: 'exact', head: true })
-              .eq('conversation_id', conv.id)
-            
-            if (countError) console.error('Error counting messages:', countError)
-            
-            return {
-              ...conv,
-              message_count: count || 0
-            }
-          })
-        )
+        // Get message counts for all conversations in a single query
+        const conversationIds = (conversationsData || []).map(conv => conv.id)
+        let messageCountsMap: Record<string, number> = {}
+        
+        if (conversationIds.length > 0) {
+          const { data: messageCounts, error: countsError } = await supabase
+            .from('messages')
+            .select('conversation_id')
+            .in('conversation_id', conversationIds)
+          
+          if (countsError) {
+            console.error('Error counting messages:', countsError)
+          } else {
+            // Count messages per conversation
+            messageCounts?.forEach(msg => {
+              messageCountsMap[msg.conversation_id] = (messageCountsMap[msg.conversation_id] || 0) + 1
+            })
+          }
+        }
+
+        const conversationsWithCounts = (conversationsData || []).map(conv => ({
+          ...conv,
+          message_count: messageCountsMap[conv.id] || 0
+        }))
 
         return {
           skinAnalysisCount: skinData?.length || 0,

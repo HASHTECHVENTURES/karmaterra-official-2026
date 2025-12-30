@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Users, TrendingUp, MapPin, Calendar, BarChart3, Bell, Smartphone, MessageSquare, Scissors, Sparkles, Activity, Eye } from 'lucide-react'
+import { Users, TrendingUp, MapPin, Calendar, BarChart3, Bell, Smartphone, MessageSquare, Scissors, Sparkles, Activity } from 'lucide-react'
 
 export default function AnalyticsPage() {
   const { data: stats, isLoading } = useQuery({
@@ -53,22 +53,18 @@ export default function AnalyticsPage() {
         })
       }
 
-      // Service usage breakdown
-      const { data: analysisData } = await supabase
-        .from('analysis_history')
-        .select('analysis_type, created_at')
-
-      const serviceUsage = {
-        skin: analysisData?.filter(a => a.analysis_type === 'skin').length || 0,
-        hair: analysisData?.filter(a => a.analysis_type === 'hair').length || 0,
-        askKarma: (conversationsRes.count || 0),
-      }
-
-      // Analysis trends (last 30 days)
+      // Analysis trends (last 30 days) - FIXED: Added user_id to select, moved before serviceUsage
       const { data: recentAnalyses } = await supabase
         .from('analysis_history')
-        .select('analysis_type, created_at')
+        .select('analysis_type, created_at, user_id')
         .gte('created_at', thirtyDaysAgo.toISOString())
+
+      // Service usage breakdown - FIXED: Now uses recentAnalyses (last 30 days) instead of all-time data
+      const serviceUsage = {
+        skin: recentAnalyses?.filter(a => a.analysis_type === 'skin').length || 0,
+        hair: recentAnalyses?.filter(a => a.analysis_type === 'hair').length || 0,
+        askKarma: (conversationsRes.count || 0),
+      }
 
       // Platform breakdown
       const { data: deviceData } = await supabase
@@ -76,17 +72,19 @@ export default function AnalyticsPage() {
         .select('platform, user_id')
 
       const platformBreakdown = {
-        android: new Set(deviceData?.filter(d => d.platform === 'android').map(d => d.user_id)).size,
-        ios: new Set(deviceData?.filter(d => d.platform === 'ios').map(d => d.user_id)).size,
+        android: new Set(deviceData?.filter(d => d.platform === 'android').map(d => d.user_id) || []).size,
+        ios: new Set(deviceData?.filter(d => d.platform === 'ios').map(d => d.user_id) || []).size,
       }
 
-      // Notification performance
+      // Notification performance - use same query for consistency
       const { data: notificationData } = await supabase
         .from('notifications')
         .select('id, sent_at, created_at, target_audience')
 
       const notificationsSent = notificationData?.filter(n => n.sent_at).length || 0
       const notificationsPending = notificationData?.filter(n => !n.sent_at).length || 0
+      // Use actual count from fetched data instead of separate count query for consistency
+      const totalNotificationsActual = notificationData?.length || 0
 
       // Ask Karma usage
       const { data: messagesData } = await supabase
@@ -126,16 +124,27 @@ export default function AnalyticsPage() {
         .slice(0, 5)
         .map(([location, count]: any) => ({ location, count }))
 
-      // Active users (users who did analysis in last 30 days)
-      const activeUserIds = new Set(recentAnalyses?.map(a => (a as any).user_id) || [])
+      // Active users (users who did analysis in last 30 days) - FIXED: Now properly filters out undefined user_ids
+      const activeUserIds = new Set(
+        recentAnalyses
+          ?.map(a => a.user_id)
+          .filter((id): id is string => id !== null && id !== undefined) || []
+      )
       const activeUsers = activeUserIds.size
 
-      // Most common analysis type
+      // Most common analysis type - FIXED: Now uses recentAnalyses (30 days) and handles tie-break properly
       const analysisTypeCounts = {
-        skin: analysisData?.filter(a => a.analysis_type === 'skin').length || 0,
-        hair: analysisData?.filter(a => a.analysis_type === 'hair').length || 0,
+        skin: recentAnalyses?.filter(a => a.analysis_type === 'skin').length || 0,
+        hair: recentAnalyses?.filter(a => a.analysis_type === 'hair').length || 0,
       }
-      const mostPopularService = analysisTypeCounts.skin > analysisTypeCounts.hair ? 'Skin Analysis' : 'Hair Analysis'
+      const mostPopularService = analysisTypeCounts.skin > analysisTypeCounts.hair 
+        ? 'Skin Analysis' 
+        : analysisTypeCounts.hair > analysisTypeCounts.skin 
+          ? 'Hair Analysis' 
+          : 'Equal'
+
+      // Calculate total platform users (sum of unique users across platforms)
+      const totalPlatformUsers = platformBreakdown.android + platformBreakdown.ios
 
       return {
         totalUsers: usersRes.count || 0,
@@ -143,13 +152,13 @@ export default function AnalyticsPage() {
         weekUsers: weekUsers || 0,
         totalAnalyses: analysisRes.count || 0,
         publishedBlogs: blogsRes.count || 0,
-        totalNotifications: notificationsRes.count || 0,
+        totalNotifications: totalNotificationsActual || notificationsRes.count || 0, // Use actual count from data for consistency
         notificationsSent,
         notificationsPending,
         totalConversations: conversationsRes.count || 0,
         totalMessages: askKarmaMessages,
         avgMessagesPerConversation,
-        totalDevices: deviceTokensRes.count || 0,
+        totalDevices: totalPlatformUsers, // Changed to show unique users with devices, not total device tokens
         genderBreakdown: genderBreakdown || {},
         topLocations,
         dailyGrowth,
@@ -211,7 +220,7 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Notifications</p>
+              <p className="text-sm text-gray-600 mb-1">Notifications Sent</p>
               <p className="text-3xl font-bold text-gray-900">{stats?.notificationsSent || 0}</p>
             </div>
             <Bell className="w-12 h-12 text-green-500" />
@@ -376,7 +385,10 @@ export default function AnalyticsPage() {
             </div>
             <div className="pt-2 border-t border-gray-200">
               <p className="text-xs text-gray-500">
-                Total Devices: <span className="font-semibold text-gray-700">{stats?.totalDevices || 0}</span>
+                Users with Devices: <span className="font-semibold text-gray-700">{stats?.totalDevices || 0}</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                (Total Users: {stats?.totalUsers || 0})
               </p>
             </div>
           </div>
@@ -428,45 +440,6 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Engagement Metrics */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Eye className="w-5 h-5" />
-          Engagement Metrics
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-blue-50 rounded-lg">
-            <p className="text-xs text-gray-600 mb-1">Active Users (30d)</p>
-            <p className="text-2xl font-bold text-blue-700">{stats?.activeUsers || 0}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {stats?.totalUsers ? Math.round((stats.activeUsers / stats.totalUsers) * 100) : 0}% of total
-            </p>
-          </div>
-          <div className="p-4 bg-purple-50 rounded-lg">
-            <p className="text-xs text-gray-600 mb-1">Analyses (30d)</p>
-            <p className="text-2xl font-bold text-purple-700">{stats?.recentAnalysesCount || 0}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {stats?.totalAnalyses ? Math.round((stats.recentAnalysesCount / stats.totalAnalyses) * 100) : 0}% of total
-            </p>
-          </div>
-          <div className="p-4 bg-green-50 rounded-lg">
-            <p className="text-xs text-gray-600 mb-1">Notification Rate</p>
-            <p className="text-2xl font-bold text-green-700">
-              {stats?.totalNotifications ? Math.round((stats.notificationsSent / stats.totalNotifications) * 100) : 0}%
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {stats?.notificationsSent || 0} sent / {stats?.totalNotifications || 0} total
-            </p>
-          </div>
-          <div className="p-4 bg-orange-50 rounded-lg">
-            <p className="text-xs text-gray-600 mb-1">Avg Messages/Conv</p>
-            <p className="text-2xl font-bold text-orange-700">{stats?.avgMessagesPerConversation || 0}</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {stats?.totalMessages || 0} messages total
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

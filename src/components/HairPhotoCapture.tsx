@@ -7,8 +7,8 @@ interface HairPhotoCaptureProps {
 }
 
 const steps = [
-  { id: 'front', name: 'Front View', description: 'Capture your hairline and forehead' },
-  { id: 'top', name: 'Top View (Crown)', description: 'Tilt down to capture the crown area' }
+  { id: 'front', name: 'Scalp', description: 'Capture your hairline and forehead' },
+  { id: 'top', name: 'Crown', description: 'Tilt down to capture the crown area' }
 ];
 
 const HairPhotoCapture: React.FC<HairPhotoCaptureProps> = ({ onComplete }) => {

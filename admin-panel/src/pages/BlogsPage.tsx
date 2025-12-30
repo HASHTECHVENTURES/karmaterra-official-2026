@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Edit, Trash2, Eye, EyeOff, ExternalLink, BookOpen, Tag, Image as ImageIcon, Bell } from 'lucide-react'
+import { Plus, Edit, Trash2, Eye, EyeOff, ExternalLink, BookOpen, Tag, Image as ImageIcon, Bell, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Blog {
@@ -957,4 +957,238 @@ function BlogForm({
   )
 }
 
+// Banner Image Manager Component
+function BannerImageManager() {
+  const queryClient = useQueryClient()
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  // Fetch current blog banner image
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['app-config-banner'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('blog_banner_image')
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') throw error
+      return data
+    },
+  })
+
+  useEffect(() => {
+    if (config?.blog_banner_image) {
+      setImagePreview(config.blog_banner_image)
+    }
+  }, [config])
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file')
+        return
+      }
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size must be less than 5MB')
+        return
+      }
+      setSelectedFile(file)
+      // Create preview
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      let imageUrl = config?.blog_banner_image || ''
+
+      // Upload image if a new file is selected
+      if (selectedFile) {
+        setUploading(true)
+        try {
+          const fileExt = selectedFile.name.split('.').pop()
+          const fileName = `blog-banner-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+          const filePath = `blog-banner/${fileName}`
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('app-images')
+            .upload(filePath, selectedFile)
+
+          if (uploadError) {
+            if (uploadError.message?.includes('Bucket not found')) {
+              throw new Error('Storage bucket "app-images" not found. Please create it in Supabase Dashboard > Storage.')
+            }
+            throw uploadError
+          }
+
+          // Get public URL
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from('app-images').getPublicUrl(filePath)
+          imageUrl = publicUrl
+        } catch (error: any) {
+          throw new Error(error.message || 'Failed to upload image')
+        } finally {
+          setUploading(false)
+        }
+      }
+
+      // Update or insert app_config
+      const { data: existingConfig } = await supabase
+        .from('app_config')
+        .select('id')
+        .maybeSingle()
+
+      if (existingConfig?.id) {
+        const { error } = await supabase
+          .from('app_config')
+          .update({ blog_banner_image: imageUrl })
+          .eq('id', existingConfig.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('app_config')
+          .insert([{ blog_banner_image: imageUrl }])
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success('Blog banner image saved successfully')
+      queryClient.invalidateQueries({ queryKey: ['app-config-banner'] })
+      setSelectedFile(null)
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to save banner image')
+    },
+  })
+
+  const removeImage = async () => {
+    try {
+      const { data: existingConfig } = await supabase
+        .from('app_config')
+        .select('id')
+        .maybeSingle()
+
+      if (existingConfig?.id) {
+        const { error } = await supabase
+          .from('app_config')
+          .update({ blog_banner_image: null })
+          .eq('id', existingConfig.id)
+        if (error) throw error
+        toast.success('Banner image removed')
+        setImagePreview(null)
+        setSelectedFile(null)
+        queryClient.invalidateQueries({ queryKey: ['app-config-banner'] })
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to remove banner image')
+    }
+  }
+
+  if (isLoading) {
+    return <div className="text-center py-12">Loading...</div>
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900">Blog Banner Image</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage the banner image displayed in the "Latest Blog Posts" section on the homepage
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
+        <div className="space-y-6">
+          {/* Current/Preview Image */}
+          {imagePreview && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Current Banner Image
+              </label>
+              <div className="relative inline-block">
+                <img
+                  src={imagePreview}
+                  alt="Blog banner preview"
+                  className="max-w-full h-auto max-h-96 rounded-lg border border-gray-200"
+                />
+                <button
+                  onClick={removeImage}
+                  className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors"
+                  title="Remove image"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Upload Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {imagePreview ? 'Replace Banner Image' : 'Upload Banner Image'}
+            </label>
+            <div className="mt-1 flex items-center gap-4">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <span className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                  <ImageIcon className="w-5 h-5" />
+                  {imagePreview ? 'Choose New Image' : 'Choose Image'}
+                </span>
+              </label>
+              {selectedFile && (
+                <span className="text-sm text-gray-600">
+                  Selected: {selectedFile.name}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Recommended size: 1200x600px. Max file size: 5MB
+            </p>
+          </div>
+
+          {/* Save Button */}
+          {(selectedFile || imagePreview) && (
+            <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={uploading || saveMutation.isPending}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              >
+                {uploading ? 'Uploading...' : saveMutation.isPending ? 'Saving...' : 'Save Banner Image'}
+              </button>
+              {selectedFile && (
+                <button
+                  onClick={() => {
+                    setSelectedFile(null)
+                    setImagePreview(config?.blog_banner_image || null)
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
