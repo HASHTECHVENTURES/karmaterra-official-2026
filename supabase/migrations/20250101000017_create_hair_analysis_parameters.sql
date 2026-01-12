@@ -121,3 +121,4 @@ SET hair_rating_config = '{
 }'::jsonb
 WHERE hair_rating_config IS NULL;
 
+

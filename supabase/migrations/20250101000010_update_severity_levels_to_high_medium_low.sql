@@ -29,3 +29,4 @@ WHERE severity_level IN ('Mild', 'Moderate', 'Severe');
 
 
 
+
