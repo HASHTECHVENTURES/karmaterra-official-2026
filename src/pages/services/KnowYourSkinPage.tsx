@@ -167,7 +167,7 @@ const KnowYourSkinPage = () => {
                 } catch {
                   // If parsing fails, treat as single string value
                   return value.trim() ? [value] : undefined;
-                }
+              }
               }
               // Convert single value to array
               return [String(value)].filter(v => v !== null && v !== undefined && v !== '');

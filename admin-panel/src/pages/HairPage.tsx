@@ -835,43 +835,70 @@ export default function HairPage() {
   }
 
   // Fetch hair reports - FIXED: Use join to avoid N+1 queries
-  const { data: reports, isLoading: reportsLoading } = useQuery({
+  const { data: reports, isLoading: reportsLoading, error: reportsError } = useQuery({
     queryKey: ['hair-reports', searchTerm],
     queryFn: async () => {
-      // Use join to fetch user profiles in single query
-      let query = supabase
-        .from('analysis_history')
-        .select(`
-          *,
-          profiles:user_id (
-            full_name,
-            email
-          )
-        `)
-        .eq('analysis_type', 'hair')
-        .order('created_at', { ascending: false })
+      try {
+        // First, fetch all analysis history records
+        const { data: analysisData, error: analysisError } = await supabase
+          .from('analysis_history')
+          .select('*')
+          .eq('analysis_type', 'hair')
+          .order('created_at', { ascending: false })
 
-      const { data, error } = await query
+        if (analysisError) {
+          console.error('Error fetching hair reports:', analysisError)
+          throw analysisError
+        }
 
-      if (error) throw error
+        if (!analysisData || analysisData.length === 0) {
+          return []
+        }
 
-      // Filter by search term if provided (after fetching with join)
-      let filteredData = data || []
-      if (searchTerm) {
-        filteredData = filteredData.filter((item: any) => {
-          const profile = item.profiles
-          return profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                 profile?.email?.toLowerCase().includes(searchTerm.toLowerCase())
-        })
+        // Get unique user IDs
+        const userIds = [...new Set(analysisData.map((item: any) => item.user_id).filter(Boolean))]
+
+        // Fetch user profiles in batch
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds)
+
+        if (profilesError) {
+          console.error('Error fetching user profiles:', profilesError)
+          // Continue even if profiles fail - we'll just show user_id
+        }
+
+        // Create a map of user_id to profile
+        const profilesMap = new Map()
+        if (profilesData) {
+          profilesData.forEach((profile: any) => {
+            profilesMap.set(profile.id, profile)
+          })
+        }
+
+        // Combine analysis data with user profiles
+        let reportsWithUsers = analysisData.map((item: any) => ({
+          ...item,
+          user: profilesMap.get(item.user_id) || null
+        }))
+
+        // Filter by search term if provided
+        if (searchTerm) {
+          reportsWithUsers = reportsWithUsers.filter((item: any) => {
+            const user = item.user
+            return user?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                   user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                   item.user_id?.toLowerCase().includes(searchTerm.toLowerCase())
+          })
+        }
+
+        return reportsWithUsers
+      } catch (error: any) {
+        console.error('Error in hair reports query:', error)
+        toast.error('Failed to load hair reports: ' + (error.message || 'Unknown error'))
+        return []
       }
-
-      // Map to expected format
-      const reportsWithUsers = filteredData.map((item: any) => ({
-        ...item,
-        user: item.profiles || null
-      }))
-
-      return reportsWithUsers
     },
     enabled: activeTab === 'reports',
   })
@@ -1201,6 +1228,15 @@ export default function HairPage() {
               />
             </div>
           </div>
+
+          {reportsError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800 font-medium">Error loading reports</p>
+              <p className="text-sm text-red-600 mt-1">
+                {reportsError instanceof Error ? reportsError.message : 'Unknown error occurred'}
+              </p>
+            </div>
+          )}
 
           {reportsLoading ? (
             <div className="text-center py-12">Loading reports...</div>
