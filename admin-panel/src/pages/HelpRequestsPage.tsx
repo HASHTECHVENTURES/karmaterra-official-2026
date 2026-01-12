@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Search, CheckCircle, XCircle, Clock, MessageSquare, User, HelpCircle } from 'lucide-react'
@@ -10,7 +10,7 @@ export default function HelpRequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
   const queryClient = useQueryClient()
 
-  const { data: requests, isLoading, error: fetchError } = useQuery({
+  const { data: requests, isLoading, error: requestsError } = useQuery({
     queryKey: ['help-requests', searchTerm, statusFilter],
     queryFn: async () => {
       let query = supabase
@@ -57,11 +57,15 @@ export default function HelpRequestsPage() {
       }
       return data || []
     },
-    onError: (error: any) => {
-      console.error('Help requests query error:', error)
-      toast.error('Failed to load help requests: ' + (error.message || 'Unknown error'))
-    },
   })
+
+  // Handle errors using useEffect
+  useEffect(() => {
+    if (requestsError) {
+      console.error('Help requests query error:', requestsError)
+      toast.error('Failed to load help requests: ' + ((requestsError as any)?.message || 'Unknown error'))
+    }
+  }, [requestsError])
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, adminResponse }: { id: string; status: string; adminResponse?: string }) => {
@@ -153,11 +157,11 @@ export default function HelpRequestsPage() {
       </div>
 
       {/* Error Message */}
-      {fetchError && (
+      {requestsError && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-800 font-medium">Error loading help requests</p>
           <p className="text-red-600 text-sm mt-1">
-            {fetchError instanceof Error ? fetchError.message : 'Unknown error occurred'}
+            {requestsError instanceof Error ? requestsError.message : 'Unknown error occurred'}
           </p>
           <p className="text-red-500 text-xs mt-2">
             Please check your database connection and ensure the help_requests table exists.
@@ -171,7 +175,7 @@ export default function HelpRequestsPage() {
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4a574]"></div>
           <p className="mt-4 text-gray-600">Loading help requests...</p>
         </div>
-      ) : requests && requests.length > 0 ? (
+      ) : requests && Array.isArray(requests) && requests.length > 0 ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

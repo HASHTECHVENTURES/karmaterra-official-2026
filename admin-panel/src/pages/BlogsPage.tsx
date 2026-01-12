@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Edit, Trash2, Eye, EyeOff, ExternalLink, BookOpen, Tag, Image as ImageIcon, Bell, X } from 'lucide-react'
+import { Plus, Edit, Trash2, Eye, EyeOff, BookOpen, Tag, Image as ImageIcon, Bell, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Blog {
@@ -36,7 +36,12 @@ export default function BlogsPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      return (data as Blog[]) || []
+      // Map data to Blog interface, providing defaults for missing fields
+      return (data || []).map((item: any) => ({
+        ...item,
+        author: item.author || 'Admin',
+        read_time: item.read_time || '5 min',
+      })) as Blog[]
     },
   })
 
@@ -559,7 +564,7 @@ function BlogForm({
           const fileName = `blog-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
           const filePath = `blog-images/${fileName}`
 
-          const { data: uploadData, error: uploadError } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('app-images')
             .upload(filePath, selectedFile)
 
@@ -1019,7 +1024,7 @@ function BannerImageManager() {
           const fileName = `blog-banner-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
           const filePath = `blog-banner/${fileName}`
 
-          const { data: uploadData, error: uploadError } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('app-images')
             .upload(filePath, selectedFile)
 

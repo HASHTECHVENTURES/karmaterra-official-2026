@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { FileQuestion, Target, ShoppingBag, TrendingUp, Users, BookOpen } from 'lucide-react'
+import { FileQuestion, Target, ShoppingBag, Users, BookOpen } from 'lucide-react'
 
 export default function DashboardPage() {
   const { data: stats, isLoading, error } = useQuery({

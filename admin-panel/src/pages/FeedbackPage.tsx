@@ -1,21 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Search, CheckCircle, XCircle, Clock, Star, MessageSquare, User } from 'lucide-react'
 import { toast } from 'sonner'
-import { SkeletonLoader, TableSkeleton } from '@/components/SkeletonLoader'
+import { TableSkeleton } from '@/components/SkeletonLoader'
 
 export default function FeedbackPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedFeedback, setSelectedFeedback] = useState<any | null>(null)
   const queryClient = useQueryClient()
-  
-  // Page title
-  const pageTitle = "Feedback Management"
-  const pageDescription = "View and manage user feedback submissions"
 
-  const { data: feedbacks, isLoading, error: fetchError } = useQuery({
+  const { data: feedbacks, isLoading, error: feedbackError } = useQuery({
     queryKey: ['feedbacks', searchTerm, statusFilter],
     queryFn: async () => {
       let query = supabase
@@ -47,11 +43,15 @@ export default function FeedbackPage() {
       }
       return data || []
     },
-    onError: (error: any) => {
-      console.error('Feedback query error:', error)
-      toast.error('Failed to load feedback: ' + (error.message || 'Unknown error'))
-    },
   })
+
+  // Handle errors using useEffect
+  useEffect(() => {
+    if (feedbackError) {
+      console.error('Feedback query error:', feedbackError)
+      toast.error('Failed to load feedback: ' + ((feedbackError as any)?.message || 'Unknown error'))
+    }
+  }, [feedbackError])
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, adminNotes }: { id: string; status: string; adminNotes?: string }) => {
@@ -135,11 +135,11 @@ export default function FeedbackPage() {
       </div>
 
       {/* Error Message */}
-      {fetchError && (
+      {feedbackError && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-800 font-medium">Error loading feedback</p>
           <p className="text-red-600 text-sm mt-1">
-            {fetchError instanceof Error ? fetchError.message : 'Unknown error occurred'}
+            {feedbackError instanceof Error ? feedbackError.message : 'Unknown error occurred'}
           </p>
           <p className="text-red-500 text-xs mt-2">
             Please check your database connection and ensure the user_feedback table exists.
@@ -150,7 +150,7 @@ export default function FeedbackPage() {
       {/* Feedback List */}
       {isLoading ? (
         <TableSkeleton rows={8} cols={7} />
-      ) : feedbacks && feedbacks.length > 0 ? (
+      ) : feedbacks && Array.isArray(feedbacks) && feedbacks.length > 0 ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

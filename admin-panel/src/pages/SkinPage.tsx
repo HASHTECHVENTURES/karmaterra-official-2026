@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Edit, Trash2, ShoppingBag, FileQuestion, Target, ArrowUp, ArrowDown, X, Eye, Search, Download, Upload, FileText, ZoomIn, Copy, Grid3x3, List, Filter, BarChart3, Image as ImageIcon, GripVertical } from 'lucide-react'
+import { Plus, Edit, Trash2, ShoppingBag, FileQuestion, Target, ArrowUp, ArrowDown, X, Eye, Search, Download, Upload, ZoomIn, Copy, Grid3x3, List, Filter, BarChart3, Image as ImageIcon, GripVertical } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -2009,14 +2009,18 @@ function ProductsTab({
       )}
 
       {showBulkImageExtractor && (
-        <BulkImageExtractor
-          parameters={parameters || []}
-          onClose={onBulkImageExtractorClose}
-          onSuccess={() => {
-            onSuccess()
-            onBulkImageExtractorClose()
-          }}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Bulk Image Extractor</h2>
+            <p className="text-gray-600 mb-4">This feature is coming soon.</p>
+            <button
+              onClick={onBulkImageExtractorClose}
+              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
 
@@ -2176,7 +2180,7 @@ function ProductsTab({
             <div className="p-12 text-center">
               <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 mb-4">
-                {searchTerm || filterStatus !== 'all' || filterType !== 'all' 
+                {searchTerm || filterStatus !== 'all' 
                   ? 'No products match your filters' 
                   : 'No products configured for this combination'}
               </p>
@@ -2185,7 +2189,6 @@ function ProductsTab({
                   onClick={() => {
                     setSearchTerm('')
                     setFilterStatus('all')
-                    setFilterType('all')
                   }}
                   className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 mr-2"
                 >

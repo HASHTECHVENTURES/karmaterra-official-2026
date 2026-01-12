@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Users, TrendingUp, MapPin, Calendar, BarChart3, Bell, Smartphone, MessageSquare, Scissors, Sparkles, Activity } from 'lucide-react'
+import { Users, TrendingUp, MapPin, BarChart3, Bell, Smartphone, MessageSquare, Scissors, Sparkles, Activity } from 'lucide-react'
 
 export default function AnalyticsPage() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['analytics'],
     queryFn: async () => {
       // Basic counts
-      const [usersRes, analysisRes, blogsRes, notificationsRes, conversationsRes, deviceTokensRes] = await Promise.all([
+      const [usersRes, analysisRes, blogsRes, notificationsRes, conversationsRes] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('analysis_history').select('id', { count: 'exact', head: true }),
         supabase.from('blog_posts').select('id', { count: 'exact', head: true }).eq('is_published', true),
@@ -361,7 +361,7 @@ export default function AnalyticsPage() {
                   className="bg-green-500 h-2 rounded-full"
                   style={{ 
                     width: `${(stats?.platformBreakdown?.android || 0) + (stats?.platformBreakdown?.ios || 0) > 0 
-                      ? ((stats.platformBreakdown?.android || 0) / ((stats.platformBreakdown?.android || 0) + (stats.platformBreakdown?.ios || 0)) * 100) 
+                      ? ((stats?.platformBreakdown?.android || 0) / ((stats?.platformBreakdown?.android || 0) + (stats?.platformBreakdown?.ios || 0)) * 100) 
                       : 0}%` 
                   }}
                 ></div>
@@ -377,7 +377,7 @@ export default function AnalyticsPage() {
                   className="bg-blue-500 h-2 rounded-full"
                   style={{ 
                     width: `${(stats?.platformBreakdown?.android || 0) + (stats?.platformBreakdown?.ios || 0) > 0 
-                      ? ((stats.platformBreakdown?.ios || 0) / ((stats.platformBreakdown?.android || 0) + (stats.platformBreakdown?.ios || 0)) * 100) 
+                      ? ((stats?.platformBreakdown?.ios || 0) / ((stats?.platformBreakdown?.android || 0) + (stats?.platformBreakdown?.ios || 0)) * 100) 
                       : 0}%` 
                   }}
                 ></div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Search, Trash2, Download, Eye, X, Sparkles, Scissors, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -23,9 +23,9 @@ export default function UsersPage() {
   const [page, setPage] = useState(1)
   const pageSize = 20
 
-  const { data: users, isLoading, error: usersError } = useQuery({
+  const { data: users, isLoading, error: usersError } = useQuery<{ data: any[]; count: number }>({
     queryKey: ['users', searchTerm, page],
-    queryFn: async () => {
+    queryFn: async (): Promise<{ data: any[]; count: number }> => {
       let query = supabase
         .from('profiles')
         .select('id, full_name, email, phone_number, gender, country, state, city, created_at', { count: 'exact' })
@@ -45,11 +45,15 @@ export default function UsersPage() {
       }
       return { data: data || [], count: count || 0 }
     },
-    onError: (error: any) => {
-      console.error('Users query error:', error)
-      toast.error('Failed to load users: ' + (error.message || 'Unknown error'))
-    },
   })
+
+  // Handle errors using useEffect
+  useEffect(() => {
+    if (usersError) {
+      console.error('Users query error:', usersError)
+      toast.error('Failed to load users: ' + ((usersError as any)?.message || 'Unknown error'))
+    }
+  }, [usersError])
 
   // Fetch user stats when a user is selected
   const { data: userStats, isLoading: statsLoading } = useQuery({
@@ -338,7 +342,7 @@ export default function UsersPage() {
       {showUserDetails && selectedUser && (
         <UserDetailsModal
           user={selectedUser}
-          stats={userStats}
+          stats={userStats || null}
           isLoading={statsLoading}
           onClose={() => {
             setShowUserDetails(false)

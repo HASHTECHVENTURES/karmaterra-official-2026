@@ -15,6 +15,7 @@ interface AppImage {
   alt_text?: string
   description?: string
   is_active: boolean
+  display_order?: number
   created_at: string
 }
 
@@ -588,8 +589,8 @@ function UploadImageForm({
             uploadError.message?.includes('Bucket not found') || 
             uploadError.message?.includes('not found') ||
             uploadError.message?.includes('does not exist') ||
-            uploadError.statusCode === 404 ||
-            uploadError.error === 'Bucket not found'
+            (uploadError as any)?.statusCode === 404 ||
+            (uploadError as any)?.error === 'Bucket not found'
           ) {
             throw new Error(
               `BUCKET_NOT_FOUND: Storage bucket "${bucketName}" not found. Please create it in Supabase Dashboard:\n\n` +
@@ -1328,6 +1329,7 @@ function ImagePreviewModal({
     </div>
   )
 }
+
 
 
 

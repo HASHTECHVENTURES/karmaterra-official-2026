@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Search, CheckCircle, XCircle, Clock, AlertTriangle, User, Flag } from 'lucide-react'
@@ -11,7 +11,7 @@ export default function ServiceReportsPage() {
   const [selectedReport, setSelectedReport] = useState<any | null>(null)
   const queryClient = useQueryClient()
 
-  const { data: reports, isLoading, error: fetchError } = useQuery({
+  const { data: reports, isLoading, error: reportsError } = useQuery({
     queryKey: ['service-reports', searchTerm, statusFilter, serviceFilter],
     queryFn: async () => {
       let query = supabase
@@ -52,11 +52,15 @@ export default function ServiceReportsPage() {
       }
       return data || []
     },
-    onError: (error: any) => {
-      console.error('Service reports query error:', error)
-      toast.error('Failed to load service reports: ' + (error.message || 'Unknown error'))
-    },
   })
+
+  // Handle errors using useEffect
+  useEffect(() => {
+    if (reportsError) {
+      console.error('Service reports query error:', reportsError)
+      toast.error('Failed to load service reports: ' + ((reportsError as any)?.message || 'Unknown error'))
+    }
+  }, [reportsError])
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, adminNotes }: { id: string; status: string; adminNotes?: string }) => {
@@ -154,11 +158,11 @@ export default function ServiceReportsPage() {
       </div>
 
       {/* Error Message */}
-      {fetchError && (
+      {reportsError && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-800 font-medium">Error loading service reports</p>
           <p className="text-red-600 text-sm mt-1">
-            {fetchError instanceof Error ? fetchError.message : 'Unknown error occurred'}
+            {reportsError instanceof Error ? reportsError.message : 'Unknown error occurred'}
           </p>
           <p className="text-red-500 text-xs mt-2">
             Please check your database connection and ensure the service_reports table exists.
@@ -172,7 +176,7 @@ export default function ServiceReportsPage() {
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4a574]"></div>
           <p className="mt-4 text-gray-600">Loading service reports...</p>
         </div>
-      ) : reports && reports.length > 0 ? (
+      ) : reports && Array.isArray(reports) && reports.length > 0 ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

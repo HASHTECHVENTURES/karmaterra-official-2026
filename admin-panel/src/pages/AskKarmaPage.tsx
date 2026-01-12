@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Search, Trash2, Eye, MessageSquare, User, Calendar, X, Brain, CheckCircle, AlertCircle, Plus, Upload, FileText } from 'lucide-react'
+import { Search, Trash2, Eye, MessageSquare, X, Brain, CheckCircle, AlertCircle, Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Conversation {
@@ -45,7 +45,7 @@ export default function AskKarmaPage() {
   const [showUploadForm, setShowUploadForm] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data: conversations, isLoading } = useQuery({
+  const { data: conversations } = useQuery({
     queryKey: ['ask-karma-conversations', searchTerm],
     queryFn: async () => {
       // Build query with joins - search will be applied after fetching if needed
@@ -593,7 +593,7 @@ function UploadForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
       const filePath = `knowledge-base/${fileName}`
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('knowledge-base')
         .upload(filePath, formData.file)
 

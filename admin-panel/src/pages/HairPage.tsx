@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Edit, Trash2, ShoppingBag, FileQuestion, Target, ArrowUp, ArrowDown, X, Eye, Search, Download, Copy, Grid3x3, List, Filter, BarChart3, Image as ImageIcon, GripVertical, Upload } from 'lucide-react'
+import { Plus, Edit, Trash2, ShoppingBag, FileQuestion, Target, ArrowUp, ArrowDown, X, Eye, Search, Download, BarChart3, GripVertical, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   DndContext,
@@ -2578,7 +2578,7 @@ function HairProductForm({
   onClose,
   onSuccess,
 }: {
-  product: HairTypeProduct | null
+  product: Product | null
   onClose: () => void
   onSuccess: () => void
 }) {

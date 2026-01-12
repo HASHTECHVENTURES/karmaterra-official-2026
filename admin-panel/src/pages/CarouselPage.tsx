@@ -14,6 +14,15 @@ interface HomeBanner {
   is_active: boolean
 }
 
+interface FormData {
+  name: string
+  description: string
+  image_url: string
+  product_link: string
+  is_active: boolean
+  send_notification?: boolean
+}
+
 export default function CarouselPage() {
   const [editingItem, setEditingItem] = useState<HomeBanner | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -217,12 +226,13 @@ function CarouselForm({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: item?.name || '',
     description: item?.description || '',
     image_url: item?.image_url || '',
     product_link: item?.product_link || '',
     is_active: item?.is_active ?? true,
+    send_notification: false,
   })
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(item?.image_url || null)
@@ -259,7 +269,7 @@ function CarouselForm({
         const fileName = `carousel/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
         const filePath = fileName
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from(bucketName)
           .upload(filePath, selectedFile, {
             cacheControl: '3600',
@@ -523,6 +533,7 @@ function CarouselForm({
     </div>
   )
 }
+
 
 
 
