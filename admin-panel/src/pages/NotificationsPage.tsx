@@ -370,8 +370,8 @@ export default function NotificationsPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <div className="mb-8"><h1 className="text-3xl font-bold text-gray-900 mb-2">Notifications</h1><p className="text-gray-600">Manage and view Notifications</p></div>
-          <p className="text-sm text-gray-600 mt-1">
-            {deviceStats !== undefined && (
+          {/* Device stats notification hidden - commented out */}
+          {/* {deviceStats !== undefined && (
               <div className="flex flex-col gap-2 mt-2">
                 <button
                   onClick={() => setShowDeviceDetails(!showDeviceDetails)}
@@ -390,7 +390,7 @@ export default function NotificationsPage() {
                   )}
                 </button>
                 
-                {showDeviceDetails && deviceStats.totalDevices > 0 && (
+                {false && showDeviceDetails && deviceStats.totalDevices > 0 && (
                   <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto">
                     <div className="flex items-center justify-between mb-3">
                       <div>
@@ -481,8 +481,7 @@ export default function NotificationsPage() {
                   </div>
                 )}
               </div>
-            )}
-          </p>
+            )} */}
         </div>
         <div className="flex items-center gap-2">
           <button

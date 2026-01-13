@@ -35,6 +35,7 @@ export default function CarouselPage() {
         .from('products_carousel')
         .select('*')
         .order('display_order', { ascending: true })
+        .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error fetching home banners:', error)
@@ -117,7 +118,14 @@ export default function CarouselPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
-        <div className="mb-8"><h1 className="text-3xl font-bold text-gray-900 mb-2">Home Banner</h1><p className="text-gray-600">Manage and view Home Banner</p></div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Home Banner</h1>
+          <p className="text-gray-600">Manage and view Home Banner</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {items?.length || 0} total banner{items?.length !== 1 ? 's' : ''} 
+            ({items?.filter(i => i.is_active).length || 0} active - shown in app)
+          </p>
+        </div>
         <button
           onClick={() => {
             setEditingItem(null)

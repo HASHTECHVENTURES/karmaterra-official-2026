@@ -212,9 +212,10 @@ export default function AnalyticsPage() {
             </div>
             <BarChart3 className="w-12 h-12 text-purple-500" />
           </div>
-          <p className="text-xs text-gray-500 mt-2">
+          {/* Active users count hidden */}
+          {/* <p className="text-xs text-gray-500 mt-2">
             {stats?.activeUsers || 0} active users (30 days)
-          </p>
+          </p> */}
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">

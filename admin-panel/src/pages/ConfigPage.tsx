@@ -274,7 +274,8 @@ export default function ConfigPage() {
           </div>
         </div>
 
-        {/* API Keys Management Section */}
+        {/* API Keys Management Section - Hidden */}
+        {false && (
         <div>
           <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Key className="w-5 h-5" />
@@ -435,10 +436,12 @@ export default function ConfigPage() {
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   )
 }
+
 
 
 

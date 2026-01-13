@@ -57,6 +57,9 @@ export default function ImagesPage() {
     // Only show app_icon category
     if (image.category !== 'app_icon') return false
     
+    // Only show icons with "app" in the name (case-insensitive)
+    if (!image.image_name.toLowerCase().includes('app')) return false
+    
     if (!searchTerm) return true
     const search = searchTerm.toLowerCase()
     return (
@@ -114,7 +117,7 @@ export default function ImagesPage() {
         <div>
           <div className="mb-8"><h1 className="text-3xl font-bold text-gray-900 mb-2">App Icon</h1><p className="text-gray-600">Manage and view App Icon</p></div>
           <p className="text-gray-600 mt-1">
-            {images?.length || 0} app icon{images?.length !== 1 ? 's' : ''}
+            {filteredImages?.length || 0} app icon{filteredImages?.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
