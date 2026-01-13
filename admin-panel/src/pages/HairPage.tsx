@@ -1246,7 +1246,8 @@ export default function HairPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Overall Health</th>
+                    {/* Overall Health column hidden */}
+                    {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Overall Health</th> */}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -1255,9 +1256,12 @@ export default function HairPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {reports.map((analysis: any) => {
                     const report = analysis.analysis_result
-                    const overallHealth = report?.hair_analysis?.["Overall Hair Health"]
-                    const severity = overallHealth?.severity || 'N/A'
-                    const description = overallHealth?.description || 'No description available'
+                    // Try multiple possible structures for description
+                    const hairAnalysis = report?.hair_analysis || report?.result?.hair_analysis
+                    const overallHealth = hairAnalysis?.["Overall Hair Health"]
+                    const summary = report?.result?.summary || report?.summary
+                    // const severity = overallHealth?.severity || 'N/A' // Hidden column
+                    const description = overallHealth?.description || summary || 'No description available'
                     
                     return (
                       <tr key={analysis.id}>
@@ -1266,7 +1270,8 @@ export default function HairPage() {
                             {analysis.user?.full_name || analysis.user?.email || 'N/A'}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        {/* Overall Health column hidden */}
+                        {/* <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             severity === 'Mild' ? 'bg-[#d4a574]/10 text-[#b8956a]' :
                             severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
@@ -1275,7 +1280,7 @@ export default function HairPage() {
                           }`}>
                             {severity}
                           </span>
-                        </td>
+                        </td> */}
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-600 max-w-md truncate">{description}</div>
                         </td>
