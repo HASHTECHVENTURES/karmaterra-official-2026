@@ -49,7 +49,7 @@ const AppShareModal = ({ isOpen, onClose }: AppShareModalProps) => {
   
   const appName = "KarmaTerra";
   const shareText = `Check out ${appName} - Your AI-powered skin and hair analysis companion! Discover personalized skincare and haircare recommendations.`;
-  const shareUrl = window.location.origin;
+  const shareUrl = "https://karmaterra-official-2026.vercel.app/";
   const encodedText = encodeURIComponent(shareText);
   const encodedUrl = encodeURIComponent(shareUrl);
 

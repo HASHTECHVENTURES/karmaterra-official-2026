@@ -285,7 +285,7 @@ serve(async (req) => {
               notification: {
                 sound: 'default',
                 channel_id: 'default',
-                icon: 'ic_notification', // White notification icon (from drawable)
+                icon: 'https://rputuujndhlocoitsbxn.supabase.co/storage/v1/object/public/app-images/notifications/ic_stat_icon.png', // Notification icon from Supabase storage
                 // Add image if available
                 ...(notification.image_url && {
                   image: notification.image_url,
@@ -402,6 +402,7 @@ serve(async (req) => {
     )
   }
 })
+
 
 
 
