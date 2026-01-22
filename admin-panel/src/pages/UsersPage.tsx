@@ -137,12 +137,21 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('profiles').delete().eq('id', id)
-      if (error) throw error
+      const { error, data } = await supabase.from('profiles').delete().eq('id', id).select()
+      if (error) {
+        console.error('Delete error:', error)
+        throw error
+      }
+      return data
     },
     onSuccess: () => {
+      // Invalidate all queries that start with 'users' to refresh the list
       queryClient.invalidateQueries({ queryKey: ['users'] })
       toast.success('User deleted successfully')
+    },
+    onError: (error: any) => {
+      console.error('Failed to delete user:', error)
+      toast.error(`Failed to delete user: ${error?.message || 'Unknown error'}`)
     },
   })
 
@@ -291,7 +300,9 @@ export default function UsersPage() {
                             deleteMutation.mutate(user.id)
                           }
                         }}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={deleteMutation.isPending}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={deleteMutation.isPending ? 'Deleting...' : 'Delete user'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
