@@ -537,11 +537,6 @@ function BlogForm({
         toast.error('Please select an image file')
         return
       }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB')
-        return
-      }
       setSelectedFile(file)
       // Create preview
       const reader = new FileReader()
@@ -842,7 +837,7 @@ function BlogForm({
                   onChange={handleFileSelect}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">Max size: 5MB. Supported: JPG, PNG, WebP</p>
+                <p className="text-xs text-gray-500 mt-1">Supported: JPG, PNG, WebP</p>
               </div>
               
               {/* OR Divider */}
@@ -995,11 +990,6 @@ function BannerImageManager() {
       // Validate file type
       if (!file.type.startsWith('image/')) {
         toast.error('Please select an image file')
-        return
-      }
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB')
         return
       }
       setSelectedFile(file)
@@ -1164,7 +1154,7 @@ function BannerImageManager() {
               )}
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              Recommended size: 1200x600px. Max file size: 5MB
+              Recommended size: 1200x600px
             </p>
           </div>
 

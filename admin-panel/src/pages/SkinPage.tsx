@@ -3010,10 +3010,6 @@ function ProductForm({
         toast.error('Please select an image file')
         return
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB')
-        return
-      }
       setSelectedFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -3195,7 +3191,7 @@ function ProductForm({
                   onChange={handleFileSelect}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">Max size: 5MB. Supported: JPG, PNG, WebP</p>
+                <p className="text-xs text-gray-500 mt-1">Supported: JPG, PNG, WebP</p>
               </div>
               
               {/* OR Divider */}

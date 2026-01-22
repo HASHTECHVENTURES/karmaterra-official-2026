@@ -721,10 +721,6 @@ function NotificationForm({
         toast.error('Please select an image file')
         return
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB')
-        return
-      }
       setSelectedImage(file)
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -963,7 +959,7 @@ function NotificationForm({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 disabled={uploadingImage}
               />
-              <p className="text-xs text-gray-500">Max size: 5MB. Recommended: 1200x600px for best display</p>
+              <p className="text-xs text-gray-500">Recommended: 1200x600px for best display</p>
               
               {/* Image Preview */}
               {(imagePreview || formData.image_url) && (

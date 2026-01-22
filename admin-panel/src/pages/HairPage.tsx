@@ -2057,10 +2057,6 @@ function ProductForm({
         toast.error('Please select an image file')
         return
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be less than 5MB')
-        return
-      }
       setSelectedFile(file)
       const reader = new FileReader()
       reader.onloadend = () => {
