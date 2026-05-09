@@ -1183,11 +1183,11 @@ function NotificationForm({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Link (optional)</label>
             <input
-              type="url"
+              type="text"
               value={formData.link}
               onChange={(e) => setFormData({ ...formData, link: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              placeholder="https://..."
+              placeholder="https://... or in-app path e.g. /products"
             />
           </div>
         </div>
