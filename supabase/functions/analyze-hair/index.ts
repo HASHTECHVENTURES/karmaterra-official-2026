@@ -8,6 +8,18 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+/** Strip data URL prefix; unwrap nested `data:...;base64,data:...` payloads from clients. */
+function rawBase64FromImageInput(img: string): string {
+  let s = img.trim()
+  while (s.startsWith('data:')) {
+    const marker = 'base64,'
+    const i = s.indexOf(marker)
+    if (i === -1) break
+    s = s.slice(i + marker.length)
+  }
+  return s
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { 
@@ -390,15 +402,17 @@ CRITICAL: You MUST respond with ONLY a valid JSON object. No markdown, no code b
           throw new Error(`Invalid image data at index ${index}`)
         }
 
-        const base64String = img.includes(',') ? img.split(',')[1] : img
+        const base64String = rawBase64FromImageInput(img)
 
         if (!base64String || base64String.length < 100) {
           throw new Error(`Image data too short at index ${index}`)
         }
 
+        const mimeType = img.includes('image/png') ? 'image/png' : 'image/jpeg'
+
         return {
           inlineData: {
-            mimeType: 'image/jpeg',
+            mimeType,
             data: base64String,
           },
         }
