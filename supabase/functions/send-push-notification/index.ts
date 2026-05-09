@@ -234,23 +234,62 @@ serve(async (req) => {
     }
 
     if (!deviceTokens || deviceTokens.length === 0) {
-      // Don't mark as sent if no tokens - keep it pending
-      console.log('⚠️ No device tokens found in database')
-      
+      // No FCM targets: still mark sent and fan out to in-app inbox (user_notifications)
+      // so the admin UI clears "Pending" and mobile users see the item in-app.
+      console.log('⚠️ No device tokens — fan-out in-app only and set sent_at')
+
+      let inAppUsers = 0
+
+      if (notification.target_audience === 'all') {
+        const { data: profiles, error: pErr } = await supabaseClient
+          .from('profiles')
+          .select('id')
+        if (pErr) throw new Error(`profiles: ${pErr.message}`)
+
+        const rows = (profiles || []).map((p: { id: string }) => ({
+          user_id: p.id,
+          notification_id,
+          is_read: false,
+        }))
+
+        const chunk = 500
+        for (let i = 0; i < rows.length; i += chunk) {
+          const slice = rows.slice(i, i + chunk)
+          const { error: upErr } = await supabaseClient
+            .from('user_notifications')
+            .upsert(slice, { onConflict: 'user_id,notification_id' })
+          if (upErr) throw new Error(`user_notifications upsert: ${upErr.message}`)
+        }
+        inAppUsers = rows.length
+      } else {
+        const { count, error: cErr } = await supabaseClient
+          .from('user_notifications')
+          .select('user_id', { count: 'exact', head: true })
+          .eq('notification_id', notification_id)
+        if (cErr) throw new Error(`user_notifications count: ${cErr.message}`)
+        inAppUsers = count || 0
+      }
+
+      await supabaseClient
+        .from('notifications')
+        .update({ sent_at: new Date().toISOString() })
+        .eq('id', notification_id)
+
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'No device tokens found. Users need to log into the app and grant notification permissions first.',
+        JSON.stringify({
+          success: true,
           sent: 0,
-          error: 'NO_DEVICE_TOKENS'
+          in_app_users: inAppUsers,
+          message:
+            'No push tokens on file — marked sent and delivered to in-app notification inboxes only.',
         }),
-        { 
-          status: 200, 
-          headers: { 
+        {
+          status: 200,
+          headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-          } 
-        }
+          },
+        },
       )
     }
 

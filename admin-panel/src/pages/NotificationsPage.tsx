@@ -331,18 +331,24 @@ export default function NotificationsPage() {
           throw new Error(errorMessage)
         }
 
-        if (data?.error === 'NO_DEVICE_TOKENS') {
-          throw new Error('No devices registered. Users need to log into the app and grant notification permissions first.')
-        }
-
         if (data?.error) {
           throw new Error(data.error + (data.details ? `: ${data.details}` : ''))
         }
 
-        if (data?.sent === 0) {
-          toast.warning('Notification queued, but no devices are registered yet. Users need to log into the app first.')
+        const pushSent = Number(data?.sent) || 0
+        const inApp = Number(data?.in_app_users) || 0
+
+        if (pushSent > 0) {
+          toast.success(`Notification sent! ${pushSent} device(s) notified`)
+        } else if (inApp > 0) {
+          toast.success(
+            data?.message ||
+              `Marked sent. ${inApp} user(s) will see this in the app inbox (no push tokens registered).`
+          )
         } else {
-          toast.success(`Notification sent! ${data?.sent || 0} device(s) notified`)
+          toast.warning(
+            'Marked sent, but no users received in-app rows (check target audience / user list).'
+          )
         }
       } catch (error: any) {
         console.error('❌ Error in sendMutation:', error)
@@ -570,7 +576,12 @@ export default function NotificationsPage() {
                   {notification.sent_at ? (
                     <span>Sent: {new Date(notification.sent_at).toLocaleString()}</span>
                   ) : (
-                    <span className="text-orange-600">Pending</span>
+                    <span
+                      className="text-orange-600"
+                      title="Use Send Now — without device push tokens, delivery goes to in-app inbox only"
+                    >
+                      Not sent yet
+                    </span>
                   )}
                 </div>
               </div>
@@ -578,9 +589,9 @@ export default function NotificationsPage() {
                 {!notification.sent_at && (
                   <button
                     onClick={() => sendMutation.mutate(notification.id)}
-                    disabled={deviceStats?.totalDevices === 0 || sendingNotificationId === notification.id}
+                    disabled={sendingNotificationId === notification.id}
                     className="flex items-center gap-2 px-4 py-2 bg-[#d4a574] text-white rounded-lg hover:bg-[#d4a574]/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={deviceStats?.totalDevices === 0 ? 'No devices registered yet' : 'Send notification'}
+                    title="Send push where tokens exist; otherwise deliver to in-app inbox only"
                   >
                     {sendingNotificationId === notification.id ? (
                       <>
