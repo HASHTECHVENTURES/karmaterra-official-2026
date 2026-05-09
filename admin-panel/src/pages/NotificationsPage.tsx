@@ -182,7 +182,7 @@ export default function NotificationsPage() {
           platform,
           last_used,
           created_at,
-          profiles(phone_number, full_name)
+          profiles(email, full_name)
         `)
         .order('created_at', { ascending: false })
       
@@ -449,7 +449,7 @@ export default function NotificationsPage() {
                                   </span>
                                 </div>
                                 <p className="text-xs text-gray-600 mb-1">
-                                  Phone: {device.profiles?.phone_number || 'N/A'}
+                                  Email: {device.profiles?.email || 'N/A'}
                                 </p>
                                 <p className="text-xs text-gray-500 font-mono break-all">
                                   Token: {device.token.substring(0, 50)}...
@@ -626,8 +626,8 @@ export default function NotificationsPage() {
 
 interface User {
   id: string
-  phone_number: string
-  full_name?: string
+  email?: string | null
+  full_name?: string | null
   hasDeviceToken?: boolean
 }
 
@@ -680,12 +680,12 @@ function NotificationForm({
     queryFn: async () => {
       let query = supabase
         .from('profiles')
-        .select('id, phone_number, full_name')
+        .select('id, email, full_name')
         .order('created_at', { ascending: false })
         .limit(100)
 
       if (userSearchTerm) {
-        query = query.or(`phone_number.ilike.%${userSearchTerm}%,full_name.ilike.%${userSearchTerm}%`)
+        query = query.or(`email.ilike.%${userSearchTerm}%,full_name.ilike.%${userSearchTerm}%`)
       }
 
       const { data: usersData, error } = await query
@@ -1019,7 +1019,7 @@ function NotificationForm({
                         key={userId}
                         className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
                       >
-                        {user?.full_name || user?.phone_number || 'Unknown'}
+                        {user?.full_name || user?.email || 'Unknown'}
                         <button
                           onClick={() => setSelectedUserIds(prev => prev.filter(id => id !== userId))}
                           className="ml-1 hover:text-blue-600"
@@ -1042,7 +1042,7 @@ function NotificationForm({
                       value={userSearchTerm}
                       onChange={(e) => setUserSearchTerm(e.target.value)}
                       onFocus={() => setShowUserPicker(true)}
-                      placeholder="Search users by phone or name..."
+                      placeholder="Search users by name or email..."
                       className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg"
                     />
                   </div>
@@ -1093,7 +1093,7 @@ function NotificationForm({
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-sm text-gray-500">{user.phone_number}</div>
+                                  <div className="text-sm text-gray-500">{user.email || '—'}</div>
                                 </div>
                                 {isSelected && (
                                   <span className="text-blue-600 font-semibold">✓</span>

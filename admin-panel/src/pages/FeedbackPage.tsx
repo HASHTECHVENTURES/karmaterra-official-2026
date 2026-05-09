@@ -21,8 +21,7 @@ export default function FeedbackPage() {
           profiles:user_id (
             id,
             full_name,
-            email,
-            phone_number
+            email
           )
         `)
         .order('created_at', { ascending: false })
@@ -175,7 +174,7 @@ export default function FeedbackPage() {
                           <div className="text-sm font-medium text-gray-900">
                             {feedback.profiles?.full_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-500">{feedback.profiles?.email || feedback.profiles?.phone_number}</div>
+                          <div className="text-sm text-gray-500">{feedback.profiles?.email || '—'}</div>
                         </div>
                       </div>
                     </td>
@@ -247,7 +246,7 @@ export default function FeedbackPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
                   <div className="text-gray-900">
-                    {selectedFeedback.profiles?.full_name || 'Unknown'} ({selectedFeedback.profiles?.email || selectedFeedback.profiles?.phone_number})
+                    {selectedFeedback.profiles?.full_name || 'Unknown'} ({selectedFeedback.profiles?.email || '—'})
                   </div>
                 </div>
 

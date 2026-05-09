@@ -21,8 +21,7 @@ export default function ServiceReportsPage() {
           profiles:user_id (
             id,
             full_name,
-            email,
-            phone_number
+            email
           )
         `)
         .order('created_at', { ascending: false })
@@ -201,7 +200,7 @@ export default function ServiceReportsPage() {
                           <div className="text-sm font-medium text-gray-900">
                             {report.profiles?.full_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-500">{report.profiles?.email || report.profiles?.phone_number}</div>
+                          <div className="text-sm text-gray-500">{report.profiles?.email || '—'}</div>
                         </div>
                       </div>
                     </td>
@@ -268,7 +267,7 @@ export default function ServiceReportsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
                   <div className="text-gray-900">
-                    {selectedReport.profiles?.full_name || 'Unknown'} ({selectedReport.profiles?.email || selectedReport.profiles?.phone_number})
+                    {selectedReport.profiles?.full_name || 'Unknown'} ({selectedReport.profiles?.email || '—'})
                   </div>
                 </div>
 

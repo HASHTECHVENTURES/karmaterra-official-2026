@@ -29,8 +29,7 @@ export default function HelpRequestsPage() {
           profiles:user_id (
             id,
             full_name,
-            email,
-            phone_number
+            email
           )
         `)
         .order('created_at', { ascending: false })
@@ -199,7 +198,7 @@ export default function HelpRequestsPage() {
                           <div className="text-sm font-medium text-gray-900">
                             {request.profiles?.full_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-500">{request.profiles?.email || request.profiles?.phone_number}</div>
+                          <div className="text-sm text-gray-500">{request.profiles?.email || '—'}</div>
                         </div>
                       </div>
                     </td>
@@ -261,7 +260,7 @@ export default function HelpRequestsPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
                   <div className="text-gray-900">
-                    {selectedRequest.profiles?.full_name || 'Unknown'} ({selectedRequest.profiles?.email || selectedRequest.profiles?.phone_number})
+                    {selectedRequest.profiles?.full_name || 'Unknown'} ({selectedRequest.profiles?.email || '—'})
                   </div>
                 </div>
 

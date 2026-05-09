@@ -28,11 +28,11 @@ export default function UsersPage() {
     queryFn: async (): Promise<{ data: any[]; count: number }> => {
       let query = supabase
         .from('profiles')
-        .select('id, full_name, email, phone_number, gender, country, state, city, created_at', { count: 'exact' })
+        .select('id, full_name, email, gender, country, state, city, created_at', { count: 'exact' })
         .order('created_at', { ascending: false })
 
       if (searchTerm) {
-        query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone_number.ilike.%${searchTerm}%`)
+        query = query.or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
       }
 
       const from = (page - 1) * pageSize
@@ -159,12 +159,11 @@ export default function UsersPage() {
     if (!users) return
 
     const csv = [
-      ['Name', 'Email', 'Phone', 'Gender', 'City', 'State', 'Country', 'Created At'].join(','),
+      ['Name', 'Email', 'Gender', 'City', 'State', 'Country', 'Created At'].join(','),
       ...(users?.data || []).map((u: any) =>
         [
           u.full_name || '',
           u.email || '',
-          u.phone_number || '',
           u.gender || '',
           u.city || '',
           u.state || '',
@@ -195,7 +194,7 @@ export default function UsersPage() {
           <SkeletonLoader variant="text" width="300px" className="mb-2" />
           <SkeletonLoader variant="text" width="200px" />
         </div>
-        <TableSkeleton rows={10} cols={6} />
+        <TableSkeleton rows={10} cols={5} />
       </div>
     )
   }
@@ -241,7 +240,7 @@ export default function UsersPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
-            placeholder="Search by name, email, or phone..."
+            placeholder="Search by name or email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#d4a574] focus:border-transparent"
@@ -257,7 +256,6 @@ export default function UsersPage() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -271,9 +269,6 @@ export default function UsersPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{user.email || 'N/A'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-500">{user.phone_number || 'N/A'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">
@@ -401,10 +396,6 @@ function UserDetailsModal({
               <div>
                 <p className="text-sm text-gray-500">Email</p>
                 <p className="text-sm font-medium text-gray-900">{user.email || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Phone</p>
-                <p className="text-sm font-medium text-gray-900">{user.phone_number || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Gender</p>
