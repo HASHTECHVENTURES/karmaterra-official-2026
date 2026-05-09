@@ -18,8 +18,15 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         const storedSession = localStorage.getItem('admin_session')
         if (storedSession) {
           const { session } = JSON.parse(storedSession)
-          if (session) {
-            // Verify session with Supabase
+          if (session?.access_token && session?.refresh_token) {
+            // Restore JWT on the client (queries use this session; localStorage alone is not enough)
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            })
+            if (sessionError) {
+              console.error('Failed to restore admin session:', sessionError)
+            }
             const { data: { user } } = await supabase.auth.getUser()
             if (user) {
               setIsAuthenticated(true)
