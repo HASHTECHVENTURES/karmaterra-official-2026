@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { supabase, ensureSupabaseSessionFromStorage } from '@/lib/supabase'
 import { Plus, Send, Bell, Users, RefreshCw, X, Search, Image as ImageIcon, FileText, Sparkles, Trash2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -628,7 +628,11 @@ interface User {
   id: string
   email?: string | null
   full_name?: string | null
-  hasDeviceToken?: boolean
+  last_client_platform?: string | null
+  /** Expo/FCM row in device_tokens — required to actually deliver a push */
+  hasPushToken: boolean
+  /** android/ios from mobile app session (may exist without push token) */
+  hasMobileClient: boolean
 }
 
 function NotificationForm({
@@ -678,9 +682,10 @@ function NotificationForm({
   const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: ['users', userSearchTerm],
     queryFn: async () => {
+      await ensureSupabaseSessionFromStorage()
       let query = supabase
         .from('profiles')
-        .select('id, email, full_name')
+        .select('id, email, full_name, last_client_platform')
         .order('created_at', { ascending: false })
         .limit(100)
 
@@ -690,25 +695,28 @@ function NotificationForm({
 
       const { data: usersData, error } = await query
       if (error) throw error
-      
-      // Check which users have device tokens
-      if (usersData && usersData.length > 0) {
-        const userIds = usersData.map(u => u.id)
-        const { data: tokens } = await supabase
-          .from('device_tokens')
-          .select('user_id')
-          .in('user_id', userIds)
-        
-        const usersWithTokens = new Set(tokens?.map(t => t.user_id) || [])
-        
-        // Add hasDeviceToken flag to each user
-        return (usersData as User[]).map(user => ({
+
+      const rows = usersData || []
+      if (rows.length === 0) return []
+
+      const userIds = rows.map((u) => u.id)
+      const { data: tokens } = await supabase
+        .from('device_tokens')
+        .select('user_id')
+        .in('user_id', userIds)
+
+      const usersWithPushTokens = new Set(tokens?.map((t) => t.user_id) || [])
+
+      return rows.map((user) => {
+        const p = (user.last_client_platform || '').toLowerCase().trim()
+        const hasMobileClient = p === 'android' || p === 'ios'
+        const hasPushToken = usersWithPushTokens.has(user.id)
+        return {
           ...user,
-          hasDeviceToken: usersWithTokens.has(user.id)
-        }))
-      }
-      
-      return (usersData as User[]) || []
+          hasPushToken,
+          hasMobileClient,
+        } as User
+      })
     },
     enabled: formData.target_audience === 'specific',
   })
@@ -1083,13 +1091,26 @@ function NotificationForm({
                                     <div className="font-medium text-gray-900">
                                       {user.full_name || 'No Name'}
                                     </div>
-                                    {user.hasDeviceToken ? (
-                                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700" title="Has device registered">
-                                        ✓ Device
+                                    {user.hasPushToken ? (
+                                      <span
+                                        className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700"
+                                        title="Push token on file — mobile notifications can be delivered"
+                                      >
+                                        ✓ Push
+                                      </span>
+                                    ) : user.hasMobileClient ? (
+                                      <span
+                                        className="text-xs px-2 py-0.5 rounded bg-sky-100 text-sky-800"
+                                        title="User has opened the mobile app from this platform; push token not saved yet (permissions / FCM / Expo project)"
+                                      >
+                                        App ({user.last_client_platform})
                                       </span>
                                     ) : (
-                                      <span className="text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700" title="No device registered - user needs to log in and grant permissions">
-                                        ⚠ No Device
+                                      <span
+                                        className="text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700"
+                                        title="No mobile session on record and no push token — user should open the app on a device and allow notifications"
+                                      >
+                                        ⚠ No push
                                       </span>
                                     )}
                                   </div>
@@ -1123,20 +1144,32 @@ function NotificationForm({
                   </p>
                   <div className="text-xs text-blue-700">
                     {(() => {
-                      const selectedUsers = users?.filter(u => selectedUserIds.includes(u.id)) || []
-                      const withDevices = selectedUsers.filter(u => u.hasDeviceToken).length
-                      const withoutDevices = selectedUsers.length - withDevices
+                      const selectedUsers = users?.filter((u) => selectedUserIds.includes(u.id)) || []
+                      const withPush = selectedUsers.filter((u) => u.hasPushToken).length
+                      const appNoPush = selectedUsers.filter((u) => !u.hasPushToken && u.hasMobileClient).length
+                      const noReach = selectedUsers.length - withPush - appNoPush
                       return (
                         <>
-                          <span className="text-green-700 font-medium">{withDevices} with device(s)</span>
-                          {withoutDevices > 0 && (
+                          <span className="text-green-700 font-medium">{withPush} with push token</span>
+                          {appNoPush > 0 && (
                             <>
                               {' • '}
-                              <span className="text-orange-700 font-medium">{withoutDevices} without device(s)</span>
-                              <p className="mt-1 text-orange-600">
-                                Users without devices need to log into the app and grant notification permissions first.
-                              </p>
+                              <span className="text-sky-800 font-medium">
+                                {appNoPush} on app (no push token yet)
+                              </span>
                             </>
+                          )}
+                          {noReach > 0 && (
+                            <>
+                              {' • '}
+                              <span className="text-orange-700 font-medium">{noReach} no app / push</span>
+                            </>
+                          )}
+                          {(appNoPush > 0 || noReach > 0) && (
+                            <p className="mt-1 text-orange-600">
+                              Push delivery needs a saved device token: user opens the app on a phone, allows
+                              notifications, and working FCM/Expo push setup.
+                            </p>
                           )}
                         </>
                       )
