@@ -16,7 +16,7 @@ import {
   Flag,
   LogOut
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, clearAdminJwtRefreshThrottle } from '@/lib/supabase'
 import { toast } from 'sonner'
 
 interface LayoutProps {
@@ -31,6 +31,7 @@ export default function Layout({ children }: LayoutProps) {
     try {
       await supabase.auth.signOut()
       localStorage.removeItem('admin_session')
+      clearAdminJwtRefreshThrottle()
       toast.success('Logged out successfully')
       navigate('/login')
     } catch (error) {

@@ -32,13 +32,15 @@ export default function LoginPage() {
         return
       }
 
-      if (data.user) {
-        toast.success('Login successful!')
-        // Store session in localStorage
+      if (data.user && data.session) {
+        // Refresh so JWT includes latest app_metadata (e.g. karmaterra_admin) for RLS
+        const { data: refreshed } = await supabase.auth.refreshSession()
+        const session = refreshed.session ?? data.session
         localStorage.setItem('admin_session', JSON.stringify({
           user: data.user,
-          session: data.session,
+          session,
         }))
+        toast.success('Login successful!')
         navigate('/dashboard')
       }
     } catch (error: any) {

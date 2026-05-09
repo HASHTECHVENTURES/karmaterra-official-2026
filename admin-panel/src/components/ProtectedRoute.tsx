@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
-import { supabase, ensureSupabaseSessionFromStorage } from '@/lib/supabase'
+import { supabase, ensureSupabaseSessionFromStorage, clearAdminJwtRefreshThrottle } from '@/lib/supabase'
 import { useState, useEffect } from 'react'
 
 const ADMIN_SESSION_KEY = 'admin_session'
@@ -58,6 +58,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         setIsAuthenticated(true)
       } else if (event === 'SIGNED_OUT') {
         localStorage.removeItem(ADMIN_SESSION_KEY)
+        clearAdminJwtRefreshThrottle()
         setIsAuthenticated(false)
       }
     })
