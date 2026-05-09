@@ -1,7 +1,9 @@
 import { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
+import { supabase, ensureSupabaseSessionFromStorage } from '@/lib/supabase'
 import { useState, useEffect } from 'react'
+
+const ADMIN_SESSION_KEY = 'admin_session'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -14,35 +16,20 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Check if there's a session in localStorage
-        const storedSession = localStorage.getItem('admin_session')
-        if (storedSession) {
-          const { session } = JSON.parse(storedSession)
-          if (session?.access_token && session?.refresh_token) {
-            // Restore JWT on the client (queries use this session; localStorage alone is not enough)
-            const { error: sessionError } = await supabase.auth.setSession({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token,
-            })
-            if (sessionError) {
-              console.error('Failed to restore admin session:', sessionError)
-            }
-            const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
-              setIsAuthenticated(true)
-              setLoading(false)
-              return
-            }
-          }
-        }
+        await ensureSupabaseSessionFromStorage()
 
-        // Check current session
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          localStorage.setItem('admin_session', JSON.stringify({
-            user: session.user,
-            session: session,
-          }))
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (session?.user) {
+          localStorage.setItem(
+            ADMIN_SESSION_KEY,
+            JSON.stringify({
+              user: session.user,
+              session,
+            })
+          )
           setIsAuthenticated(true)
         } else {
           setIsAuthenticated(false)
@@ -57,16 +44,20 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
     checkAuth()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        localStorage.setItem('admin_session', JSON.stringify({
-          user: session.user,
-          session: session,
-        }))
+        localStorage.setItem(
+          ADMIN_SESSION_KEY,
+          JSON.stringify({
+            user: session.user,
+            session,
+          })
+        )
         setIsAuthenticated(true)
       } else if (event === 'SIGNED_OUT') {
-        localStorage.removeItem('admin_session')
+        localStorage.removeItem(ADMIN_SESSION_KEY)
         setIsAuthenticated(false)
       }
     })
@@ -93,4 +84,3 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   return <>{children}</>
 }
-

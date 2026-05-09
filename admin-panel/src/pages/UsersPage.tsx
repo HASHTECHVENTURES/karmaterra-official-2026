@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { supabase, ensureSupabaseSessionFromStorage } from '@/lib/supabase'
 import { Search, Trash2, Download, Eye, X, Sparkles, Scissors, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { SkeletonLoader, TableSkeleton } from '@/components/SkeletonLoader'
@@ -26,6 +26,7 @@ export default function UsersPage() {
   const { data: users, isLoading, error: usersError } = useQuery<{ data: any[]; count: number }>({
     queryKey: ['users', searchTerm, page],
     queryFn: async (): Promise<{ data: any[]; count: number }> => {
+      await ensureSupabaseSessionFromStorage()
       let query = supabase
         .from('profiles')
         .select('id, full_name, email, gender, country, state, city, created_at', { count: 'exact' })
@@ -137,6 +138,7 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      await ensureSupabaseSessionFromStorage()
       const { error, data } = await supabase.from('profiles').delete().eq('id', id).select()
       if (error) {
         console.error('Delete error:', error)

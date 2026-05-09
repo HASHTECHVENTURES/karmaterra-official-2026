@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
+import { supabase, ensureSupabaseSessionFromStorage } from '@/lib/supabase'
 import { Users, TrendingUp, MapPin, BarChart3, Bell, Smartphone, MessageSquare, Scissors, Sparkles, Activity } from 'lucide-react'
 
 export default function AnalyticsPage() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['analytics'],
     queryFn: async () => {
+      await ensureSupabaseSessionFromStorage()
       // Basic counts
       const [usersRes, analysisRes, blogsRes, notificationsRes, conversationsRes] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
