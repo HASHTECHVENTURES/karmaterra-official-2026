@@ -67,14 +67,27 @@ export default function AnalyticsPage() {
         askKarma: (conversationsRes.count || 0),
       }
 
-      // Platform breakdown
-      const { data: deviceData } = await supabase
-        .from('device_tokens')
-        .select('platform, user_id')
+      // Platform breakdown: push tokens (device_tokens) + last app OS (profiles.last_client_platform)
+      const [{ data: deviceData }, { data: profilePlatformRows }] = await Promise.all([
+        supabase.from('device_tokens').select('platform, user_id'),
+        supabase.from('profiles').select('id, last_client_platform'),
+      ])
+
+      const androidUserIds = new Set<string>()
+      const iosUserIds = new Set<string>()
+
+      const addPlatform = (userId: string, platform: string | null | undefined) => {
+        const p = (platform || '').toLowerCase().trim()
+        if (p === 'android') androidUserIds.add(userId)
+        else if (p === 'ios') iosUserIds.add(userId)
+      }
+
+      deviceData?.forEach((d) => addPlatform(d.user_id, d.platform))
+      profilePlatformRows?.forEach((row) => addPlatform(row.id, row.last_client_platform))
 
       const platformBreakdown = {
-        android: new Set(deviceData?.filter(d => d.platform === 'android').map(d => d.user_id) || []).size,
-        ios: new Set(deviceData?.filter(d => d.platform === 'ios').map(d => d.user_id) || []).size,
+        android: androidUserIds.size,
+        ios: iosUserIds.size,
       }
 
       // Notification performance - use same query for consistency
@@ -144,8 +157,8 @@ export default function AnalyticsPage() {
           ? 'Hair Analysis' 
           : 'Equal'
 
-      // Calculate total platform users (sum of unique users across platforms)
-      const totalPlatformUsers = platformBreakdown.android + platformBreakdown.ios
+      // Unique users with any recorded mobile platform (avoid double-counting)
+      const usersWithMobilePlatform = new Set([...androidUserIds, ...iosUserIds]).size
 
       return {
         totalUsers: usersRes.count || 0,
@@ -159,7 +172,7 @@ export default function AnalyticsPage() {
         totalConversations: conversationsRes.count || 0,
         totalMessages: askKarmaMessages,
         avgMessagesPerConversation,
-        totalDevices: totalPlatformUsers, // Changed to show unique users with devices, not total device tokens
+        totalDevices: usersWithMobilePlatform,
         genderBreakdown: genderBreakdown || {},
         topLocations,
         dailyGrowth,
@@ -387,10 +400,10 @@ export default function AnalyticsPage() {
             </div>
             <div className="pt-2 border-t border-gray-200">
               <p className="text-xs text-gray-500">
-                Users with Devices: <span className="font-semibold text-gray-700">{stats?.totalDevices || 0}</span>
+                Users with platform data: <span className="font-semibold text-gray-700">{stats?.totalDevices || 0}</span>
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                (Total Users: {stats?.totalUsers || 0})
+                From app session (last_client_platform) or push token (Total Users: {stats?.totalUsers || 0})
               </p>
             </div>
           </div>
