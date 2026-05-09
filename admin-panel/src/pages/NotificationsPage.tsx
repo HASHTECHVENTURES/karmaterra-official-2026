@@ -301,34 +301,55 @@ export default function NotificationsPage() {
     mutationFn: async (id: string) => {
       setSendingNotificationId(id)
       try {
+        const runInAppFanoutRpc = async () => {
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_fanout_notification_in_app', {
+            p_notification_id: id,
+          })
+          if (rpcErr) throw new Error(rpcErr.message)
+          const row = rpcData as { in_app_users?: number } | null
+          const inApp = Number(row?.in_app_users) || 0
+          toast.success(
+            `Delivered to ${inApp} user(s) in-app (no push tokens). Redeploy the send-push-notification Edge Function when ready for FCM.`
+          )
+        }
+
         // Call the edge function to send push notifications
         const { data, error } = await supabase.functions.invoke('send-push-notification', {
           body: { notification_id: id },
         })
 
+        let edgeErrorCode = ''
         if (error) {
           console.error('❌ Edge Function error:', error)
-          // Try to extract error message from error object
           let errorMessage = error.message || 'Failed to send notification'
-          
-          // Check if error has context with response body
           if (error.context?.body) {
             try {
-              const errorBody = typeof error.context.body === 'string' 
-                ? JSON.parse(error.context.body) 
-                : error.context.body
+              const errorBody =
+                typeof error.context.body === 'string'
+                  ? JSON.parse(error.context.body)
+                  : error.context.body
               if (errorBody.error) {
-                errorMessage = errorBody.error
+                errorMessage = String(errorBody.error)
               }
               if (errorBody.details) {
                 errorMessage += `: ${errorBody.details}`
               }
-            } catch (e) {
-              // Ignore parse errors
+            } catch {
+              /* ignore */
             }
           }
-          
+          edgeErrorCode = errorMessage
+          if (edgeErrorCode === 'NO_DEVICE_TOKENS' || edgeErrorCode.includes('NO_DEVICE_TOKENS')) {
+            await runInAppFanoutRpc()
+            return
+          }
           throw new Error(errorMessage)
+        }
+
+        // Legacy Edge still returns 200 + { error: "NO_DEVICE_TOKENS" } in JSON body
+        if (data?.error === 'NO_DEVICE_TOKENS') {
+          await runInAppFanoutRpc()
+          return
         }
 
         if (data?.error) {
